@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<MsixPackagingToolTemplate
+    xmlns="http://schemas.microsoft.com/msix/packaging/msixpackagingtool/template/2022">
+    <Settings
+        AllowTelemetry="false"
+        ApplyACLsToPackageFiles="true"
+        GenerateCommandLineFile="true"
+        AllowPromptForPassword="false">
+    </Settings>
+    <Installer
+        Path="z-server-backup-tools.exe"
+        Arguments=""
+        InstallLocation="C:\Program Files\Z\ZServerBackup">
+    </Installer>
+    <PackageInformation
+        PackageName="ZServerBackup"
+        PackageDisplayName="ZServerBackup"
+        PublisherName="CN=Z"
+        PublisherDisplayName="Z"
+        Version="1.0.0.0"
+        PackageDescription="远程 Windows 分卷 zip 流水线备份客户端">
+        <Capabilities>
+            <Capability Name="runFullTrust" />
+            
+        </Capabilities>
+        <Applications>
+            <Application
+                Id="com.z.serverbackuptools"
+                Description="远程 Windows 分卷 zip 流水线备份客户端"
+                DisplayName="ZServerBackup"
+                ExecutableName="z-server-backup-tools.exe"
+                EntryPoint="Windows.FullTrustApplication">
+                
+            </Application>
+        </Applications>
+        <Resources>
+            <Resource Language="en-us" />
+        </Resources>
+        <Dependencies>
+            <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.19041.0" />
+        </Dependencies>
+        <Properties>
+            <Framework>false</Framework>
+            <DisplayName>ZServerBackup</DisplayName>
+            <PublisherDisplayName>Z</PublisherDisplayName>
+            <Description>远程 Windows 分卷 zip 流水线备份客户端</Description>
+            <Logo>Assets\AppIcon.png</Logo>
+        </Properties>
+    </PackageInformation>
+    <SaveLocation PackagePath="z-server-backup-tools.msix" />
+    <PackageIntegrity>
+        <CertificatePath></CertificatePath>
+    </PackageIntegrity>
+</MsixPackagingToolTemplate>

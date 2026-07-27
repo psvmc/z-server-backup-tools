@@ -1,0 +1,161 @@
+name: Release All Platforms
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (e.g. 1.0.1)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+          - os: ubuntu-24.04
+            platform: linux
+          - os: macos-latest
+            platform: macos
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install NSIS (Windows)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          $nsisDir = Join-Path ${env:ProgramFiles(x86)} 'NSIS'
+          if (-not (Test-Path (Join-Path $nsisDir 'makensis.exe'))) {
+            $nsisDir = Join-Path $env:ProgramFiles 'NSIS'
+          }
+          if (-not (Test-Path (Join-Path $nsisDir 'makensis.exe'))) {
+            Write-Error "makensis.exe not found after NSIS install"
+            exit 1
+          }
+          Add-Content -Path $env:GITHUB_PATH -Value $nsisDir
+          & (Join-Path $nsisDir 'makensis.exe') /VERSION
+
+      - name: Install Linux deps
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libwebkitgtk-6.0-dev pkg-config build-essential
+
+      - name: Build
+        shell: bash
+        env:
+          INSTALL_SCOPE: user
+        run: |
+          set -euo pipefail
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          go install github.com/wailsapp/wails/v3/cmd/wails3@latest
+          cd frontend && npm ci && cd ..
+          mkdir -p release
+
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            if ! command -v makensis >/dev/null 2>&1; then
+              echo "::error::makensis not found in PATH after NSIS install"
+              exit 1
+            fi
+            wails3 task windows:package
+            wails3 task build:zipbak-srv
+            cp -f dist/*-installer.exe release/
+            cp -f dist/zipbak-srv.exe release/
+          elif [ "${{ matrix.platform }}" = "linux" ]; then
+            if wails3 task linux:create:deb && wails3 task linux:create:rpm; then
+              cp -f dist/*.deb dist/*.rpm release/ 2>/dev/null || true
+            else
+              wails3 task linux:build
+              cp -f dist/ZServerBackup release/ZServerBackup-linux-amd64
+            fi
+          else
+            wails3 task darwin:package:universal
+            ditto -c -k --keepParent dist/ZServerBackup.app release/ZServerBackup-macos-universal.zip
+          fi
+          ls -la release/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform }}
+          path: release/*
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout for changelog
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate changelog from git tags
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          resolve_tag() {
+            local tag="$1"
+            for candidate in "$tag" "${tag#v}" "v${tag#v}"; do
+              if git rev-parse "refs/tags/${candidate}" >/dev/null 2>&1; then
+                echo "$candidate"
+                return 0
+              fi
+            done
+            return 1
+          }
+          CURRENT_TAG="$(resolve_tag "$RELEASE_TAG")" || {
+            echo "::error::Tag ${RELEASE_TAG} not found. Push the tag first."
+            exit 1
+          }
+          PREV_TAG="$(git tag -l --sort=-version:refname | awk -v cur="$CURRENT_TAG" '$0==cur {getline; print; exit}')"
+          if [ -z "$PREV_TAG" ]; then
+            HEADER="## 变更 (${CURRENT_TAG})"
+            LOG="- 首个发布版本"
+          else
+            HEADER="## 变更 (${PREV_TAG} → ${CURRENT_TAG})"
+            LOG=$(git log "${PREV_TAG}..${CURRENT_TAG}" --pretty=format:"- %s (%h)" --no-merges)
+            [ -z "$LOG" ] && LOG="- 无 commit 变更"
+          fi
+          { printf '%s\n\n' "$HEADER"; printf '%s\n' "$LOG"; } > release-notes.md
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          target_commitish: master
+          name: ZServerBackup ${{ inputs.tag }}
+          body_path: release-notes.md
+          files: dist/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

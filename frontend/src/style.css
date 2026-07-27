@@ -1,0 +1,192 @@
+@import "tailwindcss";
+
+:root {
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #2c3e50;
+  background: #eef6f2;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Ant Design ConfigProvider 根节点需占满视口，否则 flex 高度链断裂 */
+#app > div {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.app-shell {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: linear-gradient(165deg, #f4fbf7 0%, #e8f3ee 45%, #eef6f2 100%);
+}
+
+.app-titlebar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  border-bottom: 1px solid #d6ebe3;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.app-titlebar-main {
+  font-size: 15px;
+  font-weight: 600;
+  color: #3d6b5c;
+  letter-spacing: 0.02em;
+}
+
+.app-version-btn {
+  border: none;
+  background: transparent;
+  color: #6b9080;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.app-version-btn:hover {
+  background: #e3f2eb;
+}
+
+.app-body {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 16px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
+}
+
+.app-body > .panel-card:not(.panel-card--grow) {
+  flex-shrink: 0;
+}
+
+.panel-card {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid #dcebe4;
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(72, 120, 98, 0.06);
+}
+
+.panel-card--grow {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-card--grow .panel-card-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-card-header {
+  padding: 10px 16px;
+  border-bottom: 1px solid #eaf3ef;
+  font-weight: 600;
+  color: #4a7768;
+  font-size: 13px;
+}
+
+.panel-card-header--with-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel-card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.panel-card-body {
+  padding: 14px 16px 16px;
+}
+
+.log-box {
+  flex: 1;
+  min-height: 200px;
+  overflow: auto;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  background: #f7fbf9;
+  border: 1px solid #e2eee8;
+  border-radius: 8px;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+}
+
+.config-form-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0 16px;
+}
+
+.config-form-grid--2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.config-form-span-2 {
+  grid-column: span 2;
+}
+
+.config-form-span-4 {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 860px) {
+  .config-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .config-form-span-2 {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 560px) {
+  .config-form-grid,
+  .config-form-grid--2 {
+    grid-template-columns: 1fr;
+  }
+  .config-form-span-2,
+  .config-form-span-4 {
+    grid-column: span 1;
+  }
+}
+
+.backup-settings-modal .ant-modal-body {
+  overflow: visible;
+  padding-top: 12px;
+  padding-bottom: 16px;
+}

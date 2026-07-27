@@ -1,0 +1,48 @@
+# This file contains the configuration for this project.
+# When you update `info` or `fileAssociations`, run `wails3 task common:update:build-assets` to update the assets.
+version: '3'
+
+info:
+  companyName: "Z"
+  productName: "ZServerBackup"
+  productIdentifier: "com.z.serverbackuptools"
+  description: "远程 Windows 分卷 zip 流水线备份客户端"
+  copyright: "(c) 2026, Z"
+  comments: "SFTP zip backup pipeline client"
+  version: "1.0.0"
+
+dev_mode:
+  root_path: .
+  log_level: info
+  debounce: 1500
+  ignore:
+    dir:
+      - .git
+      - node_modules
+      - frontend/node_modules
+      - frontend/dist
+      - frontend/bindings
+      - dist
+      - bin
+      - .task
+    file:
+      - .DS_Store
+      - .gitignore
+      - .gitkeep
+      - "*_test.go"
+    watched_extension:
+      - "*.go"
+      - "*.vue"
+      - "*.ts"
+      - "*.css"
+    git_ignore: true
+  executes:
+    - cmd: wails3 build DEV=true
+      type: blocking
+    - cmd: scripts\dev-run-app.bat
+      type: primary
+
+fileAssociations: []
+
+other:
+  - name: My Other Data

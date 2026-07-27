@@ -1,0 +1,11 @@
+.task
+dist
+bin
+*.syso
+frontend/dist
+frontend/bindings
+frontend/node_modules
+build/linux/appimage/build
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+*.exe
+!cmd/zipbak-srv/*.exe
