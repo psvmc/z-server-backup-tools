@@ -6,11 +6,18 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"z-server-backup-tools/backend/model"
 	"z-server-backup-tools/backend/remote"
 	"z-server-backup-tools/backend/sftpclient"
 	"z-server-backup-tools/backend/util"
+)
+
+const (
+	maxRetries    = 3
+	retryBaseWait = 2 * time.Second
+	retryMaxWait  = 10 * time.Second
 )
 
 // contextCanceledMsg 用于将 context.Canceled 包装为友好的中文提示
@@ -32,10 +39,9 @@ func (p *Pipeline) Run(ctx context.Context) error {
 	if err := osMkdirLocal(p.cfg.LocalDir); err != nil {
 		return err
 	}
-	if err := p.refreshStatus(); err != nil {
+	if err := retryOp(ctx, "读取远程状态", p.log, p.refreshStatus); err != nil {
 		p.log("读取远程状态失败: " + err.Error())
 	}
-	p.logOversizedWarnings()
 	if strings.TrimSpace(p.status.PendingZip) != "" {
 		p.log("检测到远程待处理分卷，将从断点继续: " + filepath.Base(p.status.PendingZip))
 	}
@@ -43,7 +49,7 @@ func (p *Pipeline) Run(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return wrapCancelError(err)
 		}
-		if err := p.refreshStatus(); err != nil {
+		if err := retryOp(ctx, "读取远程状态", p.log, p.refreshStatus); err != nil {
 			p.log("读取远程状态失败: " + err.Error())
 		}
 		if p.status.Done && strings.TrimSpace(p.status.PendingZip) == "" {
@@ -52,7 +58,7 @@ func (p *Pipeline) Run(ctx context.Context) error {
 		}
 
 		p.setPhase("pack")
-		zipRemote, err := p.remotePack()
+		zipRemote, err := retryWrap(ctx, "远程打包", p.log, p.remotePack)
 		if err != nil {
 			if strings.Contains(err.Error(), "备份已完成") {
 				p.status.Done = true
@@ -77,7 +83,7 @@ func (p *Pipeline) Run(ctx context.Context) error {
 			if err := ctx.Err(); err != nil {
 				return
 			}
-			ahead, err := p.remotePackAhead()
+			ahead, err := retryWrap(ctx, "预打包下一卷", p.log, p.remotePackAhead)
 			if err != nil {
 				p.log("预打包下一卷失败: " + err.Error())
 				return
@@ -87,7 +93,9 @@ func (p *Pipeline) Run(ctx context.Context) error {
 			}
 		}()
 
-		if err := p.download(ctx, zipRemote, localPath); err != nil {
+		if err := retryOp(ctx, "下载分卷", p.log, func() error {
+			return p.download(ctx, zipRemote, localPath)
+		}); err != nil {
 			return wrapCancelError(err)
 		}
 		p.log("下载完成")
@@ -112,13 +120,15 @@ func (p *Pipeline) Run(ctx context.Context) error {
 		p.log("哈希校验通过")
 
 		p.setPhase("delete")
-		if err := p.deleteRemote(zipRemote); err != nil {
+		if err := retryOp(ctx, "删除远程分卷", p.log, func() error {
+			return p.deleteRemote(zipRemote)
+		}); err != nil {
 			return err
 		}
 		p.log("已删除远程 zip")
 
 		p.setPhase("ack")
-		if err := p.remoteAck(); err != nil {
+		if err := retryOp(ctx, "确认 ack", p.log, p.remoteAck); err != nil {
 			return err
 		}
 		p.log("已确认 ack，继续下一卷")
@@ -135,6 +145,11 @@ func wrapCancelError(err error) error {
 
 func (p *Pipeline) setPhase(phase string) {
 	p.status.Phase = phase
+	if phase != "download" {
+		p.status.DownloadBytesDone = 0
+		p.status.DownloadBytesTotal = 0
+		p.status.DownloadSpeedBps = 0
+	}
 }
 
 func (p *Pipeline) maxGBFlag() string {
@@ -197,7 +212,33 @@ func (p *Pipeline) download(ctx context.Context, remotePath, localPath string) e
 	}
 	defer sc.Close()
 	remotePath = util.NormalizeRemotePath(remotePath)
-	return sc.Download(ctx, remotePath, localPath)
+
+	var progMu sync.Mutex
+	var lastMark time.Time
+	var lastBytes int64
+
+	onProgress := func(written, total int64) {
+		progMu.Lock()
+		defer progMu.Unlock()
+		p.status.DownloadBytesDone = written
+		if total > 0 {
+			p.status.DownloadBytesTotal = total
+		}
+		now := time.Now()
+		if lastMark.IsZero() {
+			lastMark = now
+			lastBytes = written
+			return
+		}
+		dt := now.Sub(lastMark).Seconds()
+		if dt >= 0.4 {
+			p.status.DownloadSpeedBps = float64(written-lastBytes) / dt
+			lastMark = now
+			lastBytes = written
+		}
+	}
+
+	return sc.DownloadWithProgress(ctx, remotePath, localPath, 0, onProgress)
 }
 
 func (p *Pipeline) verifyHash(localPath string) error {
@@ -252,26 +293,6 @@ func osMkdirLocal(dir string) error {
 	return osMkdirAll(dir)
 }
 
-func (p *Pipeline) logOversizedWarnings() {
-	cli, err := remote.Dial(p.cfg)
-	if err != nil {
-		return
-	}
-	defer cli.Close()
-	state := util.NormalizeRemotePath(p.cfg.RemoteState)
-	out, err := cli.RunRemote("oversized", "--state", state, "--max-gb", p.maxGBFlag())
-	if err != nil {
-		return
-	}
-	items, err := ParseOversizedJSON(out)
-	if err != nil {
-		return
-	}
-	for _, line := range OversizedWarningLines(p.cfg.MaxPartBytes(), items) {
-		p.log(line)
-	}
-}
-
 func splitLogLines(s string) []string {
 	if strings.TrimSpace(s) == "" {
 		return nil
@@ -284,4 +305,84 @@ func splitLogLines(s string) []string {
 		}
 	}
 	return lines
+}
+
+// isConnError 判断错误是否为连接断开类可重试错误。
+func isConnError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "connection lost") ||
+		strings.Contains(msg, "connection closed") ||
+		strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "i/o timeout") ||
+		strings.Contains(msg, "eof") ||
+		strings.Contains(msg, "ssh: handshake failed") ||
+		strings.Contains(msg, "dial tcp") ||
+		strings.Contains(msg, "reset by peer") ||
+		strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "ssh: unexpected")
+}
+
+// retryOp 对远程操作进行自动重试，遇到连接类错误时按指数退避等待后重试。
+func retryOp(ctx context.Context, label string, log LogFn, fn func() error) error {
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			wait := retryBaseWait * (1 << (attempt - 1))
+			if wait > retryMaxWait {
+				wait = retryMaxWait
+			}
+			log(fmt.Sprintf("%s 失败（第 %d 次重试，等待 %v）: %v", label, attempt, wait, lastErr))
+			select {
+			case <-ctx.Done():
+				return wrapCancelError(ctx.Err())
+			case <-time.After(wait):
+			}
+		}
+		err := fn()
+		if err == nil {
+			if attempt > 0 {
+				log(label + " 重试成功")
+			}
+			return nil
+		}
+		lastErr = err
+		if !isConnError(err) {
+			return err
+		}
+	}
+	return fmt.Errorf("%s 已重试 %d 次仍失败: %w", label, maxRetries, lastErr)
+}
+
+// retryWrap 是 retryOp 的变体，用于返回 (string, error) 的函数。
+func retryWrap(ctx context.Context, label string, log LogFn, fn func() (string, error)) (string, error) {
+	var lastErr error
+	var result string
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			wait := retryBaseWait * (1 << (attempt - 1))
+			if wait > retryMaxWait {
+				wait = retryMaxWait
+			}
+			log(fmt.Sprintf("%s 失败（第 %d 次重试，等待 %v）: %v", label, attempt, wait, lastErr))
+			select {
+			case <-ctx.Done():
+				return "", wrapCancelError(ctx.Err())
+			case <-time.After(wait):
+			}
+		}
+		result, lastErr = fn()
+		if lastErr == nil {
+			if attempt > 0 {
+				log(label + " 重试成功")
+			}
+			return result, nil
+		}
+		if !isConnError(lastErr) {
+			return "", lastErr
+		}
+	}
+	return "", fmt.Errorf("%s 已重试 %d 次仍失败: %w", label, maxRetries, lastErr)
 }

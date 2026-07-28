@@ -45,6 +45,7 @@ export function useBackupJob() {
   const logs = ref<string[]>([]);
   const configPath = ref("");
   const settingsSaving = ref(false);
+  const remoteInitLoading = ref(false);
 
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let remotePollTimer: ReturnType<typeof setInterval> | null = null;
@@ -136,11 +137,13 @@ export function useBackupJob() {
   };
 
   const initRemote = async () => {
-    const hide = message.loading("远程 init 扫描中...", 0);
+    if (remoteInitLoading.value) {
+      return;
+    }
+    remoteInitLoading.value = true;
     try {
       await BackupService.InitRemote(toBindingConfig(config.value));
       await refreshStatus();
-      hide();
       const s = status.value;
       if (s.remoteInited && s.totalFiles > 0) {
         message.success(`远程 init 完成：共 ${s.totalFiles} 个文件，已打包 ${s.packedFiles} 个`);
@@ -150,8 +153,9 @@ export function useBackupJob() {
         message.success("远程 init 完成");
       }
     } catch (err) {
-      hide();
       message.error(formatError(err));
+    } finally {
+      remoteInitLoading.value = false;
     }
   };
 
@@ -216,6 +220,7 @@ export function useBackupJob() {
     status,
     logs,
     settingsSaving,
+    remoteInitLoading,
     saveConnectionConfig,
     savePathsConfig,
     testConnection,

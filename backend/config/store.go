@@ -13,8 +13,9 @@ import (
 const appConfigDir = "z-server-backup-tools"
 
 type diskConfig struct {
-	SkippedUpdateVersion string             `json:"skippedUpdateVersion,omitempty"`
-	Backup               model.BackupConfig `json:"backup"`
+	SkippedUpdateVersion string                    `json:"skippedUpdateVersion,omitempty"`
+	Backup               model.BackupConfig        `json:"backup"`
+	BackupTiming         model.BackupTimingSession `json:"backupTiming,omitempty"`
 }
 
 type Store struct {
@@ -22,6 +23,7 @@ type Store struct {
 	filePath             string
 	SkippedUpdateVersion string
 	Backup               model.BackupConfig
+	BackupTiming         model.BackupTimingSession
 }
 
 var (
@@ -71,6 +73,7 @@ func (s *Store) load() error {
 	}
 	s.SkippedUpdateVersion = payload.SkippedUpdateVersion
 	s.Backup = payload.Backup
+	s.BackupTiming = payload.BackupTiming
 	return nil
 }
 
@@ -78,6 +81,7 @@ func (s *Store) save() error {
 	payload := diskConfig{
 		SkippedUpdateVersion: s.SkippedUpdateVersion,
 		Backup:               s.Backup,
+		BackupTiming:         s.BackupTiming,
 	}
 	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
@@ -124,4 +128,30 @@ func (s *Store) SetBackupConfig(cfg model.BackupConfig) error {
 
 func (s *Store) ConfigPath() string {
 	return s.filePath
+}
+
+func (s *Store) GetBackupTiming() model.BackupTimingSession {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.BackupTiming
+}
+
+func (s *Store) SetBackupTiming(session model.BackupTimingSession) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.load(); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	s.BackupTiming = session
+	return s.save()
+}
+
+func (s *Store) ClearBackupTiming() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.load(); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	s.BackupTiming = model.BackupTimingSession{}
+	return s.save()
 }

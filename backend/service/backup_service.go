@@ -263,6 +263,7 @@ func (s *BackupService) ResetBackupTask(cfg model.BackupConfig) error {
 	s.status.RemoteHint = ""
 	s.logs = nil
 	s.mu.Unlock()
+	s.clearBackupTiming()
 	s.appendLog("任务已重置，下次备份将从第一个文件开始")
 	return nil
 }
@@ -294,6 +295,11 @@ func (s *BackupService) RefreshRemoteStatus(cfg model.BackupConfig) error {
 	s.mu.Lock()
 	s.applyRemoteStatus(st, false)
 	s.status.RemoteHint = ""
+	if st.Done {
+		s.mu.Unlock()
+		s.clearBackupTiming()
+		return nil
+	}
 	s.mu.Unlock()
 	return nil
 }
@@ -301,7 +307,9 @@ func (s *BackupService) RefreshRemoteStatus(cfg model.BackupConfig) error {
 func (s *BackupService) GetJobStatus() model.JobStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.status
+	st := s.status
+	s.applyTimingToStatus(&st)
+	return st
 }
 
 func (s *BackupService) GetLogs() []string {
@@ -354,6 +362,19 @@ func (s *BackupService) runPipeline(ctx context.Context, cfg model.BackupConfig)
 		s.mu.Unlock()
 	}()
 
+	if st, err := s.queryRemoteStatusLocked(cfg); err == nil {
+		s.mu.Lock()
+		s.applyRemoteStatus(st, false)
+		packed := s.status.PackedFiles
+		s.mu.Unlock()
+		s.beginBackupTiming(packed)
+	} else {
+		s.mu.Lock()
+		packed := s.status.PackedFiles
+		s.mu.Unlock()
+		s.beginBackupTiming(packed)
+	}
+
 	pipe := zipbak.NewPipeline(cfg, s.appendLog, &s.status)
 	s.appendLog("开始备份流水线")
 	if err := pipe.Run(ctx); err != nil {
@@ -365,11 +386,11 @@ func (s *BackupService) runPipeline(ctx context.Context, cfg model.BackupConfig)
 			s.appendLog("备份任务已取消")
 		} else {
 			s.appendLog("错误: " + errMsg)
-			s.appendLog("可再次点击「开始备份」从远程断点继续（有未传完的分卷会先重试该卷；勿点「重置任务」）。")
 		}
 		s.app.Event.Emit("backup-error", errMsg)
 		return
 	}
+	s.clearBackupTiming()
 	s.app.Event.Emit("backup-done", "ok")
 }
 

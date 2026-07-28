@@ -73,11 +73,16 @@ body {
   min-height: 0;
   width: 100%;
   box-sizing: border-box;
-  padding: 16px 20px 20px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   overflow: hidden;
+}
+
+.app-body > .panel-card--grow {
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .app-body > .panel-card:not(.panel-card--grow) {
@@ -94,17 +99,18 @@ body {
 }
 
 .panel-card--grow {
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
 
 .panel-card--grow .panel-card-body {
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .panel-card-header {
@@ -133,10 +139,33 @@ body {
   padding: 14px 16px 16px;
 }
 
+.backup-toolbar-trailing {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.backup-toolbar-trailing .ant-checkbox-wrapper {
+  align-items: center;
+  line-height: 32px;
+}
+
+.log-box-wrap {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .log-box {
-  flex: 1;
-  min-height: 200px;
-  overflow: auto;
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   font-family: Consolas, "Courier New", monospace;
   font-size: 12px;
   line-height: 1.45;
@@ -145,6 +174,7 @@ body {
   border-radius: 8px;
   padding: 10px 12px;
   white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .config-form-grid {

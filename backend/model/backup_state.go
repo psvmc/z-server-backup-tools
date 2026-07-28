@@ -33,6 +33,12 @@ type JobStatus struct {
 	PendingZip   string `json:"pendingZip,omitempty"`
 	PrefetchZip  string `json:"prefetchZip,omitempty"`
 	RemoteHint   string `json:"remoteHint,omitempty"`
-	MaxFileBytes       int64  `json:"maxFileBytes"`
-	OversizedFileCount int    `json:"oversizedFileCount"`
+	MaxFileBytes       int64   `json:"maxFileBytes"`
+	OversizedFileCount int     `json:"oversizedFileCount"`
+	TimingStartedAtMs        int64   `json:"timingStartedAtMs,omitempty"`
+	TimingPackedFilesAtStart int     `json:"timingPackedFilesAtStart,omitempty"`
+	TimingEstimatedTotalMs   int64   `json:"timingEstimatedTotalMs,omitempty"`
+	DownloadBytesDone        int64   `json:"downloadBytesDone,omitempty"`
+	DownloadBytesTotal       int64   `json:"downloadBytesTotal,omitempty"`
+	DownloadSpeedBps         float64 `json:"downloadSpeedBps,omitempty"`
 }

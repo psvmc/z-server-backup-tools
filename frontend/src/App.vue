@@ -10,6 +10,7 @@ import { useAppUpdate } from "./composables/useAppUpdate";
 import { useUpdateProgress } from "./composables/useUpdateProgress";
 import { useBackupJob } from "./composables/useBackupJob";
 import { useBackupTiming } from "./composables/useBackupTiming";
+import { downloadPhaseLabel } from "./utils/backupUi";
 
 import type { BackupConfig } from "./types/backup";
 
@@ -23,6 +24,7 @@ const {
   status,
   logs,
   settingsSaving,
+  remoteInitLoading,
   saveConnectionConfig,
   savePathsConfig,
   testConnection,
@@ -36,10 +38,15 @@ const {
 const { elapsedText, remainingText } = useBackupTiming(status);
 
 const phaseLabel = computed(() => {
+  const downloadLabel = downloadPhaseLabel(status.value);
+  if (downloadLabel) {
+    return downloadLabel;
+  }
   const map: Record<string, string> = {
     starting: "启动中",
     pack: "远程打包",
     download: "下载",
+    verify: "校验",
     delete: "删除远程包",
     ack: "确认 ack",
   };
@@ -95,10 +102,12 @@ async function onSavePaths(cfg: BackupConfig) {
       <div class="app-body">
         <BackupRunPanel
           :status="status"
+          :config="config"
           :phase-label="phaseLabel"
           :elapsed-text="elapsedText"
           :remaining-text="remainingText"
           :logs="logs"
+          :init-loading="remoteInitLoading"
           @start="startBackup"
           @stop="stopBackup"
           @refresh="refreshStatus"

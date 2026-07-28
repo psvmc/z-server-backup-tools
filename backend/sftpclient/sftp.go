@@ -48,6 +48,10 @@ func (c *Client) Close() error {
 }
 
 func (c *Client) Download(ctx context.Context, remotePath, localPath string) error {
+	return c.DownloadWithProgress(ctx, remotePath, localPath, 0, nil)
+}
+
+func (c *Client) DownloadWithProgress(ctx context.Context, remotePath, localPath string, total int64, onProgress ProgressFunc) error {
 	if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
 		return err
 	}
@@ -57,15 +61,20 @@ func (c *Client) Download(ctx context.Context, remotePath, localPath string) err
 		return err
 	}
 	defer rf.Close()
+	if total <= 0 {
+		if fi, statErr := rf.Stat(); statErr == nil {
+			total = fi.Size()
+		}
+	}
 	lf, err := os.Create(tmp)
 	if err != nil {
 		return err
 	}
 
-	// 使用 io.Copy 配合 context 取消检测，通过 goroutine + select 实现
+	pw := &progressWriter{w: lf, total: total, onProg: onProgress}
 	done := make(chan error, 1)
 	go func() {
-		_, err := io.Copy(lf, rf)
+		_, err := io.Copy(pw, rf)
 		done <- err
 	}()
 	select {

@@ -24,9 +24,30 @@ export interface JobStatus {
   lastError: string;
   remoteInited: boolean;
   pendingZip?: string;
+  prefetchZip?: string;
   remoteHint?: string;
   maxFileBytes?: number;
   oversizedFileCount?: number;
+  timingStartedAtMs?: number;
+  timingPackedFilesAtStart?: number;
+  timingEstimatedTotalMs?: number;
+  downloadBytesDone?: number;
+  downloadBytesTotal?: number;
+  downloadSpeedBps?: number;
+}
+
+export type LocalPartState = "downloaded" | "downloading";
+
+export interface LocalPartFile {
+  name: string;
+  path: string;
+  sizeBytes: number;
+  state: LocalPartState;
+}
+
+export interface LocalPartListing {
+  localDir: string;
+  files: LocalPartFile[];
 }
 
 export function remotePathsFromAppDir(appDir: string) {

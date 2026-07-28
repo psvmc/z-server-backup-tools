@@ -1,14 +1,41 @@
 import { computed, onUnmounted, ref, watch, type Ref } from "vue";
+import { BackupService } from "../../bindings/z-server-backup-tools/backend/service";
 import type { JobStatus } from "../types/backup";
 import { estimateTotalMs, formatDuration } from "../utils/duration";
+
+function syncFromStatus(
+  status: JobStatus,
+  backupStartedAt: Ref<number | null>,
+  packedFilesAtStart: Ref<number>,
+  estimatedTotalMs: Ref<number | null>,
+) {
+  const started = status.timingStartedAtMs ?? 0;
+  if (started > 0 && !status.done) {
+    backupStartedAt.value = started;
+    packedFilesAtStart.value = status.timingPackedFilesAtStart ?? 0;
+    if (status.timingEstimatedTotalMs && status.timingEstimatedTotalMs > 0) {
+      estimatedTotalMs.value = status.timingEstimatedTotalMs;
+    }
+  } else {
+    backupStartedAt.value = null;
+    packedFilesAtStart.value = 0;
+    estimatedTotalMs.value = null;
+  }
+}
 
 export function useBackupTiming(status: Ref<JobStatus>) {
   const backupStartedAt = ref<number | null>(null);
   const packedFilesAtStart = ref(0);
-  /** 最近一次文件进度变化时推算的整任务总耗时；两次进度之间随时钟递减剩余时间 */
   const estimatedTotalMs = ref<number | null>(null);
   const clockMs = ref(Date.now());
   let clockTimer: ReturnType<typeof setInterval> | null = null;
+  let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const timingVisible = computed(() => {
+    if (status.value.running) return true;
+    const started = status.value.timingStartedAtMs ?? backupStartedAt.value ?? 0;
+    return started > 0 && !status.value.done;
+  });
 
   const stopClock = () => {
     if (clockTimer) {
@@ -26,20 +53,16 @@ export function useBackupTiming(status: Ref<JobStatus>) {
   };
 
   watch(
-    () => status.value.running,
-    (running) => {
-      if (running) {
-        backupStartedAt.value = Date.now();
-        packedFilesAtStart.value = status.value.packedFiles;
-        estimatedTotalMs.value = null;
+    () => status.value,
+    (st) => {
+      syncFromStatus(st, backupStartedAt, packedFilesAtStart, estimatedTotalMs);
+      if (st.running) {
         startClock();
       } else {
         stopClock();
-        backupStartedAt.value = null;
-        packedFilesAtStart.value = 0;
-        estimatedTotalMs.value = null;
       }
     },
+    { deep: true, immediate: true },
   );
 
   watch(
@@ -60,28 +83,39 @@ export function useBackupTiming(status: Ref<JobStatus>) {
       const totalEst = estimateTotalMs(elapsed, doneInSession, total);
       if (totalEst != null) {
         estimatedTotalMs.value = totalEst;
+        if (persistTimer) {
+          clearTimeout(persistTimer);
+        }
+        persistTimer = setTimeout(() => {
+          void BackupService.SetBackupTimingEstimate(Math.round(totalEst));
+        }, 800);
       }
     },
   );
 
-  onUnmounted(stopClock);
+  onUnmounted(() => {
+    stopClock();
+    if (persistTimer) {
+      clearTimeout(persistTimer);
+    }
+  });
 
   const elapsedMs = computed(() => {
-    if (!status.value.running || backupStartedAt.value == null) {
+    if (backupStartedAt.value == null || !timingVisible.value) {
       return 0;
     }
     return clockMs.value - backupStartedAt.value;
   });
 
   const elapsedText = computed(() => {
-    if (!status.value.running) {
+    if (!timingVisible.value) {
       return "--:--";
     }
     return formatDuration(elapsedMs.value);
   });
 
   const remainingText = computed(() => {
-    if (!status.value.running) {
+    if (!timingVisible.value) {
       return "--:--";
     }
     const total = status.value.totalFiles;
