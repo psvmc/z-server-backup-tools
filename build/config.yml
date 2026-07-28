@@ -9,7 +9,7 @@ info:
   description: "远程 Windows 分卷 zip 流水线备份客户端"
   copyright: "(c) 2026, Z"
   comments: "SFTP zip backup pipeline client"
-  version: "1.0.0"
+  version: "1.0.2"
 
 dev_mode:
   root_path: .

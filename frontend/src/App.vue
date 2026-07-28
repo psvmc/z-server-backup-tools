@@ -14,7 +14,7 @@ import { downloadPhaseLabel } from "./utils/backupUi";
 
 import type { BackupConfig } from "./types/backup";
 
-const appTitle = ref("ZServerBackup v1.0.0");
+const appTitle = ref("服务器文件备份");
 const settingsOpen = ref(false);
 const { checkOnStartup, checkForUpdate, loadCurrentVersion } = useAppUpdate();
 const { updateProgress } = useUpdateProgress();
@@ -57,7 +57,7 @@ const phaseLabel = computed(() => {
 onMounted(async () => {
   try {
     const ver = await loadCurrentVersion();
-    appTitle.value = `ZServerBackup v${ver}`;
+    appTitle.value = `服务器文件备份 v${ver}`;
   } catch {
     // keep default
   }

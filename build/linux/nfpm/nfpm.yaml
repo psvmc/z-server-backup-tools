@@ -3,10 +3,10 @@
 #
 # The lines below are called `modelines`. See `:help modeline`
 
-name: "z-server-backup-tools.exe"
+name: "ZServerBackup"
 arch: ${GOARCH}
 platform: "linux"
-version: "1.0.0"
+version: "1.0.2"
 section: "default"
 priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
@@ -17,12 +17,12 @@ license: "MIT"
 release: "1"
 
 contents:
-  - src: "./bin/z-server-backup-tools.exe"
-    dst: "/usr/local/bin/z-server-backup-tools.exe"
+  - src: "./dist/ZServerBackup"
+    dst: "/usr/local/bin/ZServerBackup"
   - src: "./build/appicon.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/z-server-backup-tools.exe.png"
-  - src: "./build/linux/z-server-backup-tools.exe.desktop"
-    dst: "/usr/share/applications/z-server-backup-tools.exe.desktop"
+    dst: "/usr/share/icons/hicolor/128x128/apps/ZServerBackup.png"
+  - src: "./build/linux/ZServerBackup.desktop"
+    dst: "/usr/share/applications/ZServerBackup.desktop"
 
 # Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
 depends:

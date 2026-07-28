@@ -3,11 +3,11 @@ Version=1.0
 Name=ZServerBackup
 Comment=远程 Windows 分卷 zip 流水线备份客户端
 # The Exec line includes %u to pass the URL to the application
-Exec=/usr/local/bin/z-server-backup-tools.exe %u
+Exec=/usr/local/bin/ZServerBackup %u
 Terminal=false
 Type=Application
-Icon=z-server-backup-tools.exe
+Icon=ZServerBackup
 Categories=Utility;
-StartupWMClass=z-server-backup-tools.exe
+StartupWMClass=ZServerBackup
 
  
