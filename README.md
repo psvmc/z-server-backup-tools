@@ -9,7 +9,7 @@
 | 组件 | 说明 |
 |------|------|
 | 本应用 | 图形化 **zipbak-cli**，配置 SSH、触发 init、跑完整流水线 |
-| `cmd/zipbak-srv` | 部署在源 Windows 服务器，提供 `init` / `pack` / `ack` / `status` |
+| `cmd/zipbak-srv` | 部署在源 Windows 服务器，提供 `init` / `pack` / `pack-ahead` / `ack` / `status` |
 | 源机 `data/state.db` | SQLite：文件清单与进度（位于远程应用目录下的 `data/`） |
 
 ## 环境
@@ -83,6 +83,8 @@ Windows 发布资产名：`ZServerBackup-amd64-installer.exe`（与 `ProductAsse
 ## 配置说明
 
 配置保存在用户目录 `%APPDATA%\z-server-backup-tools\config.json`（各平台为 `UserConfigDir/z-server-backup-tools/config.json`）。
+
+本机流水线在 **下载当前分卷** 时会并行触发远程 **`pack-ahead`** 预打下一卷；`ack` 后下一卷通常已在 staging 就绪。升级客户端后请同步替换源机上的 **`zipbak-srv.exe`**（需支持 `pack-ahead`）。
 
 主要字段：`host`、`remote_app_dir`（其下使用 `zipbak-srv.exe`、`data/state.db`、`staging/`）、`remote_source`（业务只读源目录）、`local_dir`、`max_part_gb` 等。
 

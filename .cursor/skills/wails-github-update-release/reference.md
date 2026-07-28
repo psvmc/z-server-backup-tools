@@ -202,12 +202,36 @@ WriteRegStr HKCU "${UNINST_KEY}" "InstallLocation" "$INSTDIR"
 
 `RestorePreviousInstallDir`：先读 `InstallLocation`，否则从 `UninstallString` 取父目录（见本仓库 / z-git 的 `project.nsi`）。
 
-**编码：** 保存为 UTF-8 **带 BOM**。PowerShell：
+**完成页中文（易踩坑）：**
+
+```nsis
+!define MUI_FINISHPAGE_RUN "$INSTDIR\${PRODUCT_EXECUTABLE}"
+!define MUI_FINISHPAGE_RUN_TEXT "$(ZSB_FINISH_RUN)"
+!insertmacro MUI_PAGE_FINISH
+; … MUI_LANGUAGE 之后：
+LangString ZSB_FINISH_RUN ${LANG_SIMPCHINESE} "立即运行 ${INFO_PRODUCTNAME}"
+LangString ZSB_FINISH_RUN ${LANG_ENGLISH} "Launch ${INFO_PRODUCTNAME}"
+```
+
+若仅**最后一步** checkbox 中文乱码、前面向导页正常 → 几乎都是 `project.nsi` 里上述 `LangString` 被按 ANSI 误解析，不是 MUI 语言包问题。
+
+**编码（必做两项）：**
+
+1. `project.nsi` 保存为 UTF-8 **带 BOM**（文件头应为 `EF BB BF`）。PowerShell：
 
 ```powershell
-$text = [IO.File]::ReadAllText($path)
-[IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding $true))
+$path = "build/windows/nsis/project.nsi"
+$text = [System.IO.File]::ReadAllText($path, [System.Text.UTF8Encoding]::new($false))
+[System.IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding $true))
 ```
+
+2. `build/windows/Taskfile.yml` → `create:nsis:installer`：
+
+```yaml
+makensis /INPUTCHARSET UTF8 ... project.nsi
+```
+
+与 BOM 同时使用：BOM 保证脚本字面量正确；`/INPUTCHARSET UTF8` 在 BOM 被 IDE 去掉时仍能编译出正确 Unicode 安装包。
 
 ## set-version 后处理
 

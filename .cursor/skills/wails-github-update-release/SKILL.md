@@ -64,7 +64,7 @@ description: >-
 - [ ] 前端：启动检查 + 手动检查 + 确认/进度弹窗（Ant Design Vue）
 - [ ] scripts/set-version.* + publish-release.bat
 - [ ] .github/workflows/release-all.yml
-- [ ] NSIS：中文、user 域、InstallLocation、UTF-8 BOM
+- [ ] NSIS：中文、user 域、InstallLocation、UTF-8 BOM、`makensis /INPUTCHARSET UTF8`
 - [ ] 资产名与 ProductAssetName 一致
 - [ ] Linux/Darwin 系统 API 按平台拆分（勿共用 !windows）
 ```
@@ -184,7 +184,10 @@ scripts\publish-release.bat 1.0.1
    `InstallDir "$LOCALAPPDATA\Programs\INSTALL_DIR"`
 3. **记住安装位置**：`InstallDirRegKey` + `RestorePreviousInstallDir` + 写入 `InstallLocation`；若改名，固定旧 `UNINST_KEY_NAME`
 4. **简体中文**：`MUI_LANGUAGE "SimpChinese"`，`.onInit` 里 `StrCpy $LANGUAGE ${LANG_SIMPCHINESE}`
-5. **UTF-8 BOM**：含中文的 `project.nsi` 必须以 UTF-8 BOM 保存，否则 makensis ACP 解析失败
+5. **中文脚本编码（必做，否则完成页等自定义文案乱码）**：
+   - 含中文的 `build/windows/nsis/project.nsi` 必须 **UTF-8 带 BOM** 保存；无 BOM 时 `makensis` 按系统 ANSI 解析，`LangString` 里的中文（常见于完成页「立即运行 …」checkbox）会乱码，而欢迎页/目录页仍可能正常（它们走 NSIS 自带语言文件）。
+   - `build/windows/Taskfile.yml` 的 `create:nsis:installer` 中，`makensis` 必须加 **`/INPUTCHARSET UTF8`**，防止编辑器去掉 BOM 后 CI/本地再次打包出乱码。
+   - 完成页自定义文案示例：`MUI_FINISHPAGE_RUN_TEXT "$(ZSB_FINISH_RUN)"` + `LangString ZSB_FINISH_RUN ${LANG_SIMPCHINESE} "立即运行 ${INFO_PRODUCTNAME}"`（`LangString` 写在 `!insertmacro MUI_LANGUAGE` 之后）。
 6. **WebView2**：`wails.webview2runtime` 会嵌入 Online Bootstrapper
 7. **本地 PATH**：`makensis` 常在 `C:\Program Files (x86)\NSIS`，脚本需自动探测
 
@@ -209,7 +212,7 @@ scripts\publish-release.bat 1.0.1
 2. 后端 update + UpdateService + main 接入  
 3. 前端检查 UI（Ant Design Vue）  
 4. set-version / publish / build-release 脚本  
-5. NSIS（中文 / user / InstallLocation / BOM）  
+5. NSIS（中文 / user / InstallLocation / UTF-8 BOM / INPUTCHARSET UTF8）  
 6. release-all.yml  
 7. 本地 `scripts\build-release.bat` 验证  
 8. 打 tag → publish → `gh run watch`

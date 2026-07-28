@@ -19,6 +19,8 @@ func main() {
 		runInit(os.Args[2:])
 	case "pack":
 		runPack(os.Args[2:])
+	case "pack-ahead":
+		runPackAhead(os.Args[2:])
 	case "ack":
 		runAck(os.Args[2:])
 	case "status":
@@ -34,7 +36,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "用法: zipbak-srv init|pack|ack|status|reset|oversized [flags]\n")
+	fmt.Fprintf(os.Stderr, "用法: zipbak-srv init|pack|pack-ahead|ack|status|reset|oversized [flags]\n")
 }
 
 func runInit(args []string) {
@@ -59,6 +61,21 @@ func runPack(args []string) {
 		fail(err)
 	}
 	fmt.Println(path)
+}
+
+func runPackAhead(args []string) {
+	fs := flag.NewFlagSet("pack-ahead", flag.ExitOnError)
+	state := fs.String("state", "", "state.db 路径（SQLite）")
+	maxGB := fs.Float64("max-gb", 2, "每卷上限 GB")
+	_ = fs.Parse(args)
+	maxBytes := zipbak.MaxPartBytesFromGB(*maxGB)
+	path, err := zipbak.PackAhead(*state, maxBytes)
+	if err != nil {
+		fail(err)
+	}
+	if path != "" {
+		fmt.Println(path)
+	}
 }
 
 func runAck(args []string) {

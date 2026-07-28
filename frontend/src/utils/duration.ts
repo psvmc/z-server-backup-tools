@@ -13,9 +13,23 @@ export function formatDuration(ms: number): string {
   return `${m}:${pad(s)}`;
 }
 
-export function estimateRemainingMs(elapsedMs: number, doneCount: number, remainingCount: number): number | null {
-  if (doneCount <= 0 || remainingCount <= 0 || elapsedMs <= 0) {
+/** 根据当前进度推算整任务总耗时（毫秒）。 */
+export function estimateTotalMs(elapsedMs: number, doneCount: number, totalCount: number): number | null {
+  if (doneCount <= 0 || totalCount <= 0 || elapsedMs <= 0) {
     return null;
   }
-  return (elapsedMs / doneCount) * remainingCount;
+  return (elapsedMs / doneCount) * totalCount;
+}
+
+/** 由总耗时估计值减去已用时间得到剩余时间；进度未更新时随时钟递减。 */
+export function estimateRemainingMs(
+  elapsedMs: number,
+  doneCount: number,
+  totalCount: number,
+): number | null {
+  const totalEst = estimateTotalMs(elapsedMs, doneCount, totalCount);
+  if (totalEst == null) {
+    return null;
+  }
+  return Math.max(0, totalEst - elapsedMs);
 }

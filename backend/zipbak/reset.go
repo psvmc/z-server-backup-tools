@@ -23,8 +23,12 @@ func ResetProgress(statePath string) error {
 	if m.PendingZip != "" {
 		_ = os.Remove(m.PendingZip)
 	}
+	if m.PrefetchZip != "" {
+		_ = os.Remove(m.PrefetchZip)
+	}
 	m.NextFileIndex = 0
 	m.PendingZip = ""
+	m.PrefetchZip = ""
 	m.PartSerial = 0
 	m.Done = m.FileCount == 0
 	return store.updateMeta(m)

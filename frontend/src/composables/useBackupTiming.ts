@@ -1,10 +1,12 @@
 import { computed, onUnmounted, ref, watch, type Ref } from "vue";
 import type { JobStatus } from "../types/backup";
-import { estimateRemainingMs, formatDuration } from "../utils/duration";
+import { estimateTotalMs, formatDuration } from "../utils/duration";
 
 export function useBackupTiming(status: Ref<JobStatus>) {
   const backupStartedAt = ref<number | null>(null);
   const packedFilesAtStart = ref(0);
+  /** 最近一次文件进度变化时推算的整任务总耗时；两次进度之间随时钟递减剩余时间 */
+  const estimatedTotalMs = ref<number | null>(null);
   const clockMs = ref(Date.now());
   let clockTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -29,11 +31,35 @@ export function useBackupTiming(status: Ref<JobStatus>) {
       if (running) {
         backupStartedAt.value = Date.now();
         packedFilesAtStart.value = status.value.packedFiles;
+        estimatedTotalMs.value = null;
         startClock();
       } else {
         stopClock();
         backupStartedAt.value = null;
         packedFilesAtStart.value = 0;
+        estimatedTotalMs.value = null;
+      }
+    },
+  );
+
+  watch(
+    () => status.value.packedFiles,
+    (packed) => {
+      if (!status.value.running || backupStartedAt.value == null) {
+        return;
+      }
+      const total = status.value.totalFiles;
+      if (total <= 0) {
+        return;
+      }
+      const doneInSession = Math.max(0, packed - packedFilesAtStart.value);
+      if (doneInSession <= 0) {
+        return;
+      }
+      const elapsed = Date.now() - backupStartedAt.value;
+      const totalEst = estimateTotalMs(elapsed, doneInSession, total);
+      if (totalEst != null) {
+        estimatedTotalMs.value = totalEst;
       }
     },
   );
@@ -63,15 +89,14 @@ export function useBackupTiming(status: Ref<JobStatus>) {
     if (total <= 0) {
       return "估算中…";
     }
-    const doneInSession = Math.max(0, packed - packedFilesAtStart.value);
     const remainingFiles = Math.max(0, total - packed);
     if (remainingFiles === 0) {
       return "0:00";
     }
-    const est = estimateRemainingMs(elapsedMs.value, doneInSession, remainingFiles);
-    if (est == null) {
+    if (estimatedTotalMs.value == null) {
       return "估算中…";
     }
+    const est = Math.max(0, estimatedTotalMs.value - elapsedMs.value);
     return formatDuration(est);
   });
 

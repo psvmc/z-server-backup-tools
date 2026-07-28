@@ -13,7 +13,7 @@ import (
 
 const (
 	metaRowID     = 1
-	schemaVersion = 2
+	schemaVersion = 3
 )
 
 // Store persists backup progress and the file manifest in SQLite.
@@ -28,6 +28,7 @@ type metaRow struct {
 	MaxPartBytes   int64
 	NextFileIndex  int
 	PendingZip     string
+	PrefetchZip    string
 	PartSerial     int
 	Done           bool
 	FileCount      int
@@ -94,6 +95,7 @@ func (s *Store) ensureSchema() error {
 			max_part_bytes INTEGER NOT NULL,
 			next_file_index INTEGER NOT NULL DEFAULT 0,
 			pending_zip TEXT NOT NULL DEFAULT '',
+			prefetch_zip TEXT NOT NULL DEFAULT '',
 			part_serial INTEGER NOT NULL DEFAULT 0,
 			done INTEGER NOT NULL DEFAULT 0,
 			file_count INTEGER NOT NULL DEFAULT 0
@@ -135,6 +137,15 @@ func (s *Store) applySchemaMigrations(ver int) error {
 		}
 		ver = 2
 	}
+	if ver < 3 {
+		if err := s.ensurePrefetchZipColumn(); err != nil {
+			return err
+		}
+		if _, err := s.db.Exec(`UPDATE schema_info SET version = 3 WHERE id = 1`); err != nil {
+			return err
+		}
+		ver = 3
+	}
 	if ver != schemaVersion {
 		return fmt.Errorf("不支持的 state 数据库版本 %d", ver)
 	}
@@ -168,6 +179,36 @@ func (s *Store) ensureFilesSizeColumn() error {
 		return nil
 	}
 	_, err = s.db.Exec(`ALTER TABLE files ADD COLUMN size_bytes INTEGER NOT NULL DEFAULT 0`)
+	return err
+}
+
+func (s *Store) ensurePrefetchZipColumn() error {
+	rows, err := s.db.Query(`PRAGMA table_info(meta)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	has := false
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return err
+		}
+		if name == "prefetch_zip" {
+			has = true
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	_, err = s.db.Exec(`ALTER TABLE meta ADD COLUMN prefetch_zip TEXT NOT NULL DEFAULT ''`)
 	return err
 }
 
@@ -215,9 +256,9 @@ func (s *Store) Init(sourceDir, stagingDir string, files []ManifestEntry) error 
 func (s *Store) loadMeta() (metaRow, error) {
 	var m metaRow
 	var done int
-	err := s.db.QueryRow(`SELECT source_dir, staging_dir, max_part_bytes, next_file_index, pending_zip, part_serial, done, file_count
+	err := s.db.QueryRow(`SELECT source_dir, staging_dir, max_part_bytes, next_file_index, pending_zip, prefetch_zip, part_serial, done, file_count
 		FROM meta WHERE id = 1`).Scan(
-		&m.SourceDir, &m.StagingDir, &m.MaxPartBytes, &m.NextFileIndex, &m.PendingZip, &m.PartSerial, &done, &m.FileCount,
+		&m.SourceDir, &m.StagingDir, &m.MaxPartBytes, &m.NextFileIndex, &m.PendingZip, &m.PrefetchZip, &m.PartSerial, &done, &m.FileCount,
 	)
 	if err == sql.ErrNoRows {
 		return m, fmt.Errorf("state 未初始化，请先 init")
@@ -234,8 +275,8 @@ func (s *Store) updateMeta(m metaRow) error {
 	if m.Done {
 		done = 1
 	}
-	_, err := s.db.Exec(`UPDATE meta SET next_file_index=?, pending_zip=?, part_serial=?, done=? WHERE id=1`,
-		m.NextFileIndex, m.PendingZip, m.PartSerial, done)
+	_, err := s.db.Exec(`UPDATE meta SET next_file_index=?, pending_zip=?, prefetch_zip=?, part_serial=?, done=? WHERE id=1`,
+		m.NextFileIndex, m.PendingZip, m.PrefetchZip, m.PartSerial, done)
 	return err
 }
 
@@ -256,6 +297,7 @@ func (s *Store) readStatus(maxPartBytes int64) (Status, error) {
 		TotalFiles:         m.FileCount,
 		PackedFiles:        m.NextFileIndex,
 		PendingZip:         m.PendingZip,
+		PrefetchZip:        m.PrefetchZip,
 		Done:               m.Done,
 		NextFileIndex:      m.NextFileIndex,
 		MaxFileBytes:       maxFile,

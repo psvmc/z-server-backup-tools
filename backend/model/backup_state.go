@@ -31,6 +31,7 @@ type JobStatus struct {
 	LastError    string `json:"lastError"`
 	RemoteInited bool   `json:"remoteInited"`
 	PendingZip   string `json:"pendingZip,omitempty"`
+	PrefetchZip  string `json:"prefetchZip,omitempty"`
 	RemoteHint   string `json:"remoteHint,omitempty"`
 	MaxFileBytes       int64  `json:"maxFileBytes"`
 	OversizedFileCount int    `json:"oversizedFileCount"`

@@ -1,6 +1,7 @@
 package zipbak
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -61,6 +62,57 @@ func TestStoreInitPackAckStatus(t *testing.T) {
 	}
 	if st.PendingZip != "" || !st.Done {
 		t.Fatalf("after ack: %+v", st)
+	}
+}
+
+func TestPackAheadPromoteOnAck(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "src")
+	staging := filepath.Join(dir, "staging")
+	stateDB := filepath.Join(dir, "state.db")
+	if err := os.MkdirAll(source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	payload := bytes.Repeat([]byte("x"), 100)
+	for _, name := range []string{"a.txt", "b.txt", "c.txt"} {
+		p := filepath.Join(source, name)
+		if err := os.WriteFile(p, payload, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := InitState(source, stateDB, staging); err != nil {
+		t.Fatal(err)
+	}
+	maxPart := int64(150)
+
+	zip1, err := Pack(stateDB, maxPart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zip2, err := PackAhead(stateDB, maxPart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if zip2 == "" {
+		t.Fatal("expected prefetch zip")
+	}
+	st, err := ReadStatus(stateDB, maxPart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.PendingZip != zip1 || st.PrefetchZip != zip2 {
+		t.Fatalf("status: %+v", st)
+	}
+
+	if err := Ack(stateDB); err != nil {
+		t.Fatal(err)
+	}
+	st, err = ReadStatus(stateDB, maxPart)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.PendingZip != zip2 || st.PrefetchZip != "" {
+		t.Fatalf("after ack promote: %+v", st)
 	}
 }
 

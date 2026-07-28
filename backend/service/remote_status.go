@@ -33,6 +33,7 @@ func (s *BackupService) applyRemoteStatus(st zipbak.Status, markInited bool) {
 	s.status.PackedFiles = st.PackedFiles
 	s.status.Done = st.Done
 	s.status.PendingZip = st.PendingZip
+	s.status.PrefetchZip = st.PrefetchZip
 	s.status.MaxFileBytes = st.MaxFileBytes
 	s.status.OversizedFileCount = st.OversizedFileCount
 	if markInited || st.TotalFiles > 0 {

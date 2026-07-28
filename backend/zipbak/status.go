@@ -5,6 +5,7 @@ type Status struct {
 	TotalFiles     int    `json:"totalFiles"`
 	PackedFiles    int    `json:"packedFiles"`
 	PendingZip     string `json:"pendingZip"`
+	PrefetchZip    string `json:"prefetchZip,omitempty"`
 	Done           bool   `json:"done"`
 	NextFileIndex  int    `json:"nextFileIndex"`
 	MaxFileBytes       int64  `json:"maxFileBytes"`

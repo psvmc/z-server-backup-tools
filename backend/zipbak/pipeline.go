@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"z-server-backup-tools/backend/model"
 	"z-server-backup-tools/backend/remote"
@@ -45,7 +46,7 @@ func (p *Pipeline) Run(ctx context.Context) error {
 		if err := p.refreshStatus(); err != nil {
 			p.log("读取远程状态失败: " + err.Error())
 		}
-		if p.status.Done {
+		if p.status.Done && strings.TrimSpace(p.status.PendingZip) == "" {
 			p.log("全部文件已备份完成")
 			return nil
 		}
@@ -68,10 +69,39 @@ func (p *Pipeline) Run(ctx context.Context) error {
 		p.status.LocalFile = localPath
 		p.setPhase("download")
 		p.log("开始下载到 " + localPath)
+
+		var prefetchWG sync.WaitGroup
+		prefetchWG.Add(1)
+		go func() {
+			defer prefetchWG.Done()
+			if err := ctx.Err(); err != nil {
+				return
+			}
+			ahead, err := p.remotePackAhead()
+			if err != nil {
+				p.log("预打包下一卷失败: " + err.Error())
+				return
+			}
+			if strings.TrimSpace(ahead) != "" {
+				p.log("远程已预打包下一卷: " + filepath.Base(ahead))
+			}
+		}()
+
 		if err := p.download(ctx, zipRemote, localPath); err != nil {
 			return wrapCancelError(err)
 		}
 		p.log("下载完成")
+
+		prefetchDone := make(chan struct{})
+		go func() {
+			prefetchWG.Wait()
+			close(prefetchDone)
+		}()
+		select {
+		case <-ctx.Done():
+			return wrapCancelError(ctx.Err())
+		case <-prefetchDone:
+		}
 
 		// 下载完成后校验文件哈希
 		p.setPhase("verify")
@@ -123,6 +153,23 @@ func (p *Pipeline) remotePack() (string, error) {
 	defer cli.Close()
 	state := util.NormalizeRemotePath(p.cfg.RemoteState)
 	out, stderr, err := cli.RunRemoteWithStderr("pack", "--state", state, "--max-gb", p.maxGBFlag())
+	if err != nil {
+		return "", err
+	}
+	for _, line := range splitLogLines(stderr) {
+		p.log(line)
+	}
+	return strings.TrimSpace(out), nil
+}
+
+func (p *Pipeline) remotePackAhead() (string, error) {
+	cli, err := remote.Dial(p.cfg)
+	if err != nil {
+		return "", err
+	}
+	defer cli.Close()
+	state := util.NormalizeRemotePath(p.cfg.RemoteState)
+	out, stderr, err := cli.RunRemoteWithStderr("pack-ahead", "--state", state, "--max-gb", p.maxGBFlag())
 	if err != nil {
 		return "", err
 	}
@@ -191,6 +238,7 @@ func (p *Pipeline) refreshStatus() error {
 	p.status.PackedFiles = st.PackedFiles
 	p.status.Done = st.Done
 	p.status.PendingZip = st.PendingZip
+	p.status.PrefetchZip = st.PrefetchZip
 	p.status.MaxFileBytes = st.MaxFileBytes
 	p.status.OversizedFileCount = st.OversizedFileCount
 	p.status.RemoteInited = true

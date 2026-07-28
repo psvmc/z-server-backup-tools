@@ -43,12 +43,24 @@ func Pack(statePath string, maxPartBytes int64) (zipPath string, err error) {
 		return "", fmt.Errorf("备份已完成")
 	}
 
-	batch, nextIdx, oversized, err := selectBatch(store, m, maxPartBytes)
+	zipPath, meta, err := buildPartZip(store, m, maxPartBytes)
 	if err != nil {
 		return "", err
 	}
+	meta.PendingZip = zipPath
+	if err := store.updateMeta(meta); err != nil {
+		return zipPath, err
+	}
+	return zipPath, nil
+}
+
+func buildPartZip(store *Store, m metaRow, maxPartBytes int64) (zipPath string, updated metaRow, err error) {
+	batch, nextIdx, oversized, err := selectBatch(store, m, maxPartBytes)
+	if err != nil {
+		return "", m, err
+	}
 	if len(batch) == 0 {
-		return "", fmt.Errorf("没有可打包的文件")
+		return "", m, fmt.Errorf("没有可打包的文件")
 	}
 	for _, o := range oversized {
 		fmt.Fprintf(os.Stderr, "警告: 文件 %s (%s) 超过分卷上限 (%s)，仍将单独打包\n",
@@ -59,21 +71,17 @@ func Pack(statePath string, maxPartBytes int64) (zipPath string, err error) {
 	name := fmt.Sprintf("part-%06d.zip", m.PartSerial)
 	zipPath = filepath.Join(m.StagingDir, name)
 	if err := os.MkdirAll(m.StagingDir, 0o755); err != nil {
-		return "", err
+		return "", m, err
 	}
 	if err := writeZip(zipPath, m.SourceDir, batch); err != nil {
-		return "", err
+		return "", m, err
 	}
 
 	m.NextFileIndex = nextIdx
-	m.PendingZip = zipPath
 	if nextIdx >= m.FileCount {
 		m.Done = true
 	}
-	if err := store.updateMeta(m); err != nil {
-		return zipPath, err
-	}
-	return zipPath, nil
+	return zipPath, m, nil
 }
 
 func selectBatch(store *Store, m metaRow, maxPartBytes int64) (rels []string, nextIdx int, oversized []OversizedFile, err error) {
@@ -166,7 +174,11 @@ func Ack(statePath string) error {
 		return fmt.Errorf("没有待确认的 zip 包")
 	}
 	m.PendingZip = ""
-	if m.NextFileIndex >= m.FileCount {
+	if m.PrefetchZip != "" {
+		m.PendingZip = m.PrefetchZip
+		m.PrefetchZip = ""
+	}
+	if m.NextFileIndex >= m.FileCount && m.PendingZip == "" {
 		m.Done = true
 	}
 	return store.updateMeta(m)
