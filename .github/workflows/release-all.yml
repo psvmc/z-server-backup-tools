@@ -82,8 +82,21 @@ jobs:
             fi
             wails3 task windows:package
             wails3 task build:zipbak-srv
-            cp -f dist/*-installer.exe release/
-            cp -f dist/zipbak-srv.exe release/
+            echo "=== dist/ contents ==="
+            ls -la dist/
+            echo "======================"
+            if ls dist/*-installer.exe 1>/dev/null 2>&1; then
+              cp -f dist/*-installer.exe release/
+            else
+              echo "::error::No installer found in dist/"
+              exit 1
+            fi
+            if [ -f dist/zipbak-srv.exe ]; then
+              cp -f dist/zipbak-srv.exe release/
+            else
+              echo "::error::zipbak-srv.exe not found in dist/"
+              exit 1
+            fi
           elif [ "${{ matrix.platform }}" = "linux" ]; then
             if wails3 task linux:create:deb && wails3 task linux:create:rpm; then
               cp -f dist/*.deb dist/*.rpm release/ 2>/dev/null || true

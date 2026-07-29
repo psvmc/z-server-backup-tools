@@ -52,7 +52,10 @@ LangString ZSB_FINISH_RUN ${LANG_SIMPCHINESE} "立即运行 ${INFO_PRODUCTNAME}"
 LangString ZSB_FINISH_RUN ${LANG_ENGLISH} "Launch ${INFO_PRODUCTNAME}"
 
 Name "${INFO_PRODUCTNAME}"
-OutFile "..\..\..\dist\ZServerBackup-${ARCH}-installer.exe"
+!ifndef OUT_DIR
+    !define OUT_DIR "..\..\..\dist"
+!endif
+OutFile "${OUT_DIR}\ZServerBackup-${ARCH}-installer.exe"
 !if "${WAILS_INSTALL_SCOPE}" == "user"
     InstallDir "$LOCALAPPDATA\Programs\z-server-backup-tools"
     InstallDirRegKey HKCU "${UNINST_KEY}" "InstallLocation"
