@@ -70,10 +70,11 @@ jobs:
           INSTALL_SCOPE: user
         run: |
           set -euo pipefail
+          ROOT="$(pwd)"
           export PATH="$(go env GOPATH)/bin:$PATH"
           go install github.com/wailsapp/wails/v3/cmd/wails3@latest
-          cd frontend && npm ci && cd ..
-          mkdir -p release
+          npm ci --prefix frontend || npm install --prefix frontend
+          mkdir -p release dist
 
           if [ "${{ matrix.platform }}" = "windows" ]; then
             if ! command -v makensis >/dev/null 2>&1; then
@@ -85,8 +86,9 @@ jobs:
             echo "=== dist/ contents ==="
             ls -la dist/
             echo "======================"
-            if ls dist/*-installer.exe 1>/dev/null 2>&1; then
-              cp -f dist/*-installer.exe release/
+            installer="$(find dist -maxdepth 1 -name '*-installer.exe' -print -quit)"
+            if [ -n "$installer" ]; then
+              cp -f "$installer" release/
             else
               echo "::error::No installer found in dist/"
               exit 1
@@ -106,7 +108,12 @@ jobs:
             fi
           else
             wails3 task darwin:package:universal
-            ditto -c -k --keepParent dist/ZServerBackup.app release/ZServerBackup-macos-universal.zip
+            if [ ! -d dist/ZServerBackup.app ]; then
+              echo "::error::dist/ZServerBackup.app not found (cwd=$(pwd))"
+              ls -la dist/ || true
+              exit 1
+            fi
+            ditto -c -k --keepParent "$ROOT/dist/ZServerBackup.app" release/ZServerBackup-macos-universal.zip
           fi
           ls -la release/
 

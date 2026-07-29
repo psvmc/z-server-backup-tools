@@ -153,17 +153,20 @@ tasks:
   generate:deb:
     summary: Creates a deb package
     cmds:
-      - wails3 tool package -name "{{.APP_NAME}}" -format deb -config ./build/linux/nfpm/nfpm.yaml -out {{.ROOT_DIR}}/bin
+      - mkdir -p {{.BIN_DIR}}
+      - wails3 tool package -name "{{.APP_NAME}}" -format deb -config ./build/linux/nfpm/nfpm.yaml -out {{.ROOT_DIR}}/{{.BIN_DIR}}
 
   generate:rpm:
     summary: Creates a rpm package
     cmds:
-      - wails3 tool package -name "{{.APP_NAME}}" -format rpm -config ./build/linux/nfpm/nfpm.yaml -out {{.ROOT_DIR}}/bin
+      - mkdir -p {{.BIN_DIR}}
+      - wails3 tool package -name "{{.APP_NAME}}" -format rpm -config ./build/linux/nfpm/nfpm.yaml -out {{.ROOT_DIR}}/{{.BIN_DIR}}
 
   generate:aur:
     summary: Creates a arch linux packager package
     cmds:
-      - wails3 tool package -name "{{.APP_NAME}}" -format archlinux -config ./build/linux/nfpm/nfpm.yaml -out {{.ROOT_DIR}}/bin
+      - mkdir -p {{.BIN_DIR}}
+      - wails3 tool package -name "{{.APP_NAME}}" -format archlinux -config ./build/linux/nfpm/nfpm.yaml -out {{.ROOT_DIR}}/{{.BIN_DIR}}
 
   generate:dotdesktop:
     summary: Generates a `.desktop` file
