@@ -73,7 +73,9 @@ jobs:
           ROOT="$(pwd)"
           export PATH="$(go env GOPATH)/bin:$PATH"
           go install github.com/wailsapp/wails/v3/cmd/wails3@latest
-          npm ci --prefix frontend || npm install --prefix frontend
+          # 勿用 npm --prefix：Windows 上会误找仓库根目录 package.json
+          # 勿强依赖 npm ci：@wailsio/runtime 为 latest + Node/npm 版本差异会导致 lock 不同步
+          (cd frontend && npm install)
           mkdir -p release dist
 
           if [ "${{ matrix.platform }}" = "windows" ]; then
@@ -84,10 +86,14 @@ jobs:
             wails3 task windows:package
             wails3 task build:zipbak-srv
             echo "=== dist/ contents ==="
-            ls -la dist/
+            ls -la dist/ || true
             echo "======================"
-            installer="$(find dist -maxdepth 1 -name '*-installer.exe' -print -quit)"
-            if [ -n "$installer" ]; then
+            # Git Bash 下 *.exe 通配可能失败，用 find / ls 兜底
+            installer="$(find dist -maxdepth 1 -type f -name '*-installer.exe' 2>/dev/null | head -n 1 || true)"
+            if [ -z "$installer" ]; then
+              installer="$(ls dist/*-installer.exe 2>/dev/null | head -n 1 || true)"
+            fi
+            if [ -n "$installer" ] && [ -f "$installer" ]; then
               cp -f "$installer" release/
             else
               echo "::error::No installer found in dist/"
@@ -102,18 +108,27 @@ jobs:
           elif [ "${{ matrix.platform }}" = "linux" ]; then
             if wails3 task linux:create:deb && wails3 task linux:create:rpm; then
               cp -f dist/*.deb dist/*.rpm release/ 2>/dev/null || true
+              if ! ls release/*.deb release/*.rpm 1>/dev/null 2>&1; then
+                echo "::error::deb/rpm build succeeded but no packages in release/"
+                ls -la dist/ || true
+                exit 1
+              fi
             else
               wails3 task linux:build
               cp -f dist/ZServerBackup release/ZServerBackup-linux-amd64
             fi
           else
             wails3 task darwin:package:universal
-            if [ ! -d dist/ZServerBackup.app ]; then
+            if [ ! -d "$ROOT/dist/ZServerBackup.app" ]; then
               echo "::error::dist/ZServerBackup.app not found (cwd=$(pwd))"
               ls -la dist/ || true
               exit 1
             fi
-            ditto -c -k --keepParent "$ROOT/dist/ZServerBackup.app" release/ZServerBackup-macos-universal.zip
+            # 用绝对路径 + zip 兜底，避免个别 runner 上 ditto 解析相对路径失败
+            if ! ditto -c -k --keepParent "$ROOT/dist/ZServerBackup.app" "$ROOT/release/ZServerBackup-macos-universal.zip"; then
+              echo "::warning::ditto failed, falling back to zip"
+              (cd "$ROOT/dist" && zip -r "$ROOT/release/ZServerBackup-macos-universal.zip" ZServerBackup.app)
+            fi
           fi
           ls -la release/
 
