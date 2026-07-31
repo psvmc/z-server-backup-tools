@@ -33,7 +33,7 @@ func migrateJSONIfNeeded(dbPath string) error {
 	if err != nil {
 		return fmt.Errorf("迁移 state.json 失败: %w", err)
 	}
-	if err := store.Init(st.SourceDir, st.StagingDir, entries); err != nil {
+	if err := store.Init(st.SourceDir, st.StagingDir, "", entries); err != nil {
 		return err
 	}
 	m, err := store.loadMeta()

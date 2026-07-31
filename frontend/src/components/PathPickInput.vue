@@ -1,8 +1,13 @@
 <script setup lang="ts">
 const model = defineModel<string>({ required: true });
 
+defineProps<{
+  showOpenFolder?: boolean;
+}>();
+
 defineEmits<{
   browse: [];
+  openFolder: [];
 }>();
 </script>
 
@@ -15,6 +20,9 @@ defineEmits<{
       class="path-pick-row__input"
       @click="$emit('browse')"
     />
+    <a-button v-if="showOpenFolder" :disabled="!model?.trim()" @click="$emit('openFolder')">
+      打开文件夹
+    </a-button>
     <a-button type="default" @click="$emit('browse')">选择</a-button>
   </div>
 </template>

@@ -68,7 +68,7 @@ func buildPartZip(store *Store, m metaRow, maxPartBytes int64) (zipPath string, 
 	}
 
 	m.PartSerial++
-	name := fmt.Sprintf("part-%06d.zip", m.PartSerial)
+	name := PartZipName(m.PartNamePrefix, m.PartSerial)
 	zipPath = filepath.Join(m.StagingDir, name)
 	if err := os.MkdirAll(m.StagingDir, 0o755); err != nil {
 		return "", m, err

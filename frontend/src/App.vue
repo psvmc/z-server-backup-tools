@@ -5,6 +5,7 @@ import zhCN from "ant-design-vue/es/locale/zh_CN";
 import UpdateConfirmDialog from "./components/UpdateConfirmDialog.vue";
 import UpdateProgressDialog from "./components/UpdateProgressDialog.vue";
 import BackupSettingsDialog from "./components/BackupSettingsDialog.vue";
+import BackupTaskFormModal from "./components/BackupTaskFormModal.vue";
 import BackupRunPanel from "./components/BackupRunPanel.vue";
 import { useAppUpdate } from "./composables/useAppUpdate";
 import { useUpdateProgress } from "./composables/useUpdateProgress";
@@ -12,19 +13,27 @@ import { useBackupJob } from "./composables/useBackupJob";
 import { useBackupTiming } from "./composables/useBackupTiming";
 import { downloadPhaseLabel } from "./utils/backupUi";
 
-import type { BackupConfig } from "./types/backup";
+import type { BackupConfig, BackupTask } from "./types/backup";
 
 const appTitle = ref("服务器文件备份");
 const settingsOpen = ref(false);
+const taskFormOpen = ref(false);
+const editingTask = ref<BackupTask | null>(null);
 const { checkOnStartup, checkForUpdate, loadCurrentVersion } = useAppUpdate();
 const { updateProgress } = useUpdateProgress();
 const {
   config,
+  tasks,
+  activeTaskId,
+  jobConfig,
   configPath,
   status,
   logs,
   settingsSaving,
   remoteInitLoading,
+  loadTasks,
+  selectTask,
+  removeTask,
   saveConnectionConfig,
   savePathsConfig,
   testConnection,
@@ -87,6 +96,21 @@ async function onSavePaths(cfg: BackupConfig) {
     settingsOpen.value = false;
   }
 }
+
+function openAddTask() {
+  editingTask.value = null;
+  taskFormOpen.value = true;
+}
+
+function openEditTask(task: BackupTask) {
+  editingTask.value = task;
+  taskFormOpen.value = true;
+}
+
+async function onTaskSaved() {
+  await loadTasks();
+  await refreshStatus();
+}
 </script>
 
 <template>
@@ -103,6 +127,9 @@ async function onSavePaths(cfg: BackupConfig) {
         <BackupRunPanel
           :status="status"
           :config="config"
+          :job-config="jobConfig"
+          :tasks="tasks"
+          :active-task-id="activeTaskId"
           :phase-label="phaseLabel"
           :elapsed-text="elapsedText"
           :remaining-text="remainingText"
@@ -114,6 +141,10 @@ async function onSavePaths(cfg: BackupConfig) {
           @init="initRemote"
           @reset="resetBackupTask"
           @open-settings="settingsOpen = true"
+          @add-task="openAddTask"
+          @edit-task="openEditTask"
+          @select-task="selectTask"
+          @remove-task="removeTask"
         />
       </div>
 
@@ -125,6 +156,13 @@ async function onSavePaths(cfg: BackupConfig) {
         @save-connection="onSaveConnection"
         @save-paths="onSavePaths"
         @test="testConnection"
+      />
+
+      <BackupTaskFormModal
+        v-model:open="taskFormOpen"
+        :connection="config"
+        :task="editingTask"
+        @saved="onTaskSaved"
       />
 
       <UpdateConfirmDialog />

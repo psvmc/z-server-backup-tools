@@ -44,8 +44,9 @@ func runInit(args []string) {
 	dir := fs.String("dir", "", "源目录")
 	state := fs.String("state", "", "state.db 路径（SQLite）")
 	staging := fs.String("staging", "", "staging 目录")
+	prefix := fs.String("prefix", "", "分卷文件名前缀")
 	_ = fs.Parse(args)
-	if _, err := zipbak.InitState(*dir, *state, *staging); err != nil {
+	if _, err := zipbak.InitState(*dir, *state, *staging, *prefix); err != nil {
 		fail(err)
 	}
 }

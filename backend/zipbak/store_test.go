@@ -25,7 +25,7 @@ func TestStoreInitPackAckStatus(t *testing.T) {
 		}
 	}
 
-	_, err := InitState(source, stateDB, staging)
+	_, err := InitState(source, stateDB, staging, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestPackAheadPromoteOnAck(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := InitState(source, stateDB, staging); err != nil {
+	if _, err := InitState(source, stateDB, staging, ""); err != nil {
 		t.Fatal(err)
 	}
 	maxPart := int64(150)

@@ -1,9 +1,10 @@
-import { onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { message } from "ant-design-vue";
 import { Events } from "@wailsio/runtime";
 import { BackupService } from "../../bindings/z-server-backup-tools/backend/service";
 import { BackupConfig as BackupConfigBinding } from "../../bindings/z-server-backup-tools/backend/model/models";
-import type { BackupConfig, JobStatus } from "../types/backup";
+import type { BackupConfig, BackupTask, JobStatus } from "../types/backup";
+import { mergeTaskConfig } from "../types/backup";
 import { formatError } from "../types/update";
 
 const defaultConfig = (): BackupConfig => ({
@@ -27,6 +28,8 @@ function bindingToPlain(cfg: BackupConfigBinding): BackupConfig {
 
 export function useBackupJob() {
   const config = ref<BackupConfig>(defaultConfig());
+  const tasks = ref<BackupTask[]>([]);
+  const activeTaskId = ref("");
   const status = ref<JobStatus>({
     running: false,
     phase: "",
@@ -47,6 +50,9 @@ export function useBackupJob() {
   const settingsSaving = ref(false);
   const remoteInitLoading = ref(false);
 
+  const activeTask = computed(() => tasks.value.find((t) => t.id === activeTaskId.value) ?? null);
+  const jobConfig = computed(() => mergeTaskConfig(config.value, activeTask.value));
+
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let remotePollTimer: ReturnType<typeof setInterval> | null = null;
   let remotePullInFlight = false;
@@ -59,9 +65,10 @@ export function useBackupJob() {
 
   const pullRemoteSnapshot = async () => {
     if (remotePullInFlight || status.value.running) return;
+    if (!jobConfig.value.task_id?.trim()) return;
     remotePullInFlight = true;
     try {
-      await BackupService.RefreshRemoteStatus(toBindingConfig(config.value));
+      await BackupService.RefreshRemoteStatus(toBindingConfig(jobConfig.value));
       await refreshLocal();
     } catch {
       // 配置未齐、远程忙或不可达时忽略
@@ -78,10 +85,53 @@ export function useBackupJob() {
     await refreshLocal();
   };
 
+  const loadTasks = async () => {
+    tasks.value = (await BackupService.GetTasks()) as BackupTask[];
+    activeTaskId.value = await BackupService.GetActiveTaskID();
+    if (!activeTaskId.value && tasks.value.length > 0) {
+      activeTaskId.value = tasks.value[0].id;
+      await BackupService.SetActiveTaskID(activeTaskId.value);
+    }
+  };
+
   const loadConfig = async () => {
     const stored = BackupConfigBinding.createFrom(await BackupService.GetConfig());
     config.value = { ...defaultConfig(), ...bindingToPlain(stored) };
     configPath.value = await BackupService.GetConfigPath();
+    await loadTasks();
+  };
+
+  const selectTask = async (taskId: string) => {
+    try {
+      await BackupService.SetActiveTaskID(taskId);
+      activeTaskId.value = taskId;
+      await refreshStatus();
+    } catch (err) {
+      message.error(formatError(err));
+    }
+  };
+
+  const removeTask = async (task: BackupTask) => {
+    const hide = message.loading("删除任务中...", 0);
+    try {
+      const next = tasks.value.filter((t) => t.id !== task.id);
+      await BackupService.SaveTasks(next);
+      tasks.value = next;
+      if (activeTaskId.value === task.id) {
+        activeTaskId.value = next[0]?.id ?? "";
+        if (activeTaskId.value) {
+          await BackupService.SetActiveTaskID(activeTaskId.value);
+        } else {
+          await BackupService.SetActiveTaskID("");
+        }
+      }
+      await refreshStatus();
+      hide();
+      message.success("任务已删除");
+    } catch (err) {
+      hide();
+      message.error(formatError(err));
+    }
   };
 
   const saveConnectionConfig = async (payload?: BackupConfig): Promise<boolean> => {
@@ -109,12 +159,15 @@ export function useBackupJob() {
       config.value = {
         ...config.value,
         remote_app_dir: toSave.remote_app_dir,
-        remote_source: toSave.remote_source,
-        local_dir: toSave.local_dir,
         max_part_gb: toSave.max_part_gb,
+        notify_email: toSave.notify_email,
+        smtp_host: toSave.smtp_host,
+        smtp_port: toSave.smtp_port,
+        smtp_user: toSave.smtp_user,
+        smtp_password: toSave.smtp_password,
       };
       configPath.value = await BackupService.GetConfigPath();
-      message.success("路径配置已保存");
+      message.success("应用配置已保存");
       return true;
     } catch (err) {
       message.error(formatError(err));
@@ -137,12 +190,14 @@ export function useBackupJob() {
   };
 
   const initRemote = async () => {
-    if (remoteInitLoading.value) {
+    if (remoteInitLoading.value) return;
+    if (!jobConfig.value.task_id?.trim()) {
+      message.warning("请先添加并选择备份任务");
       return;
     }
     remoteInitLoading.value = true;
     try {
-      await BackupService.InitRemote(toBindingConfig(config.value));
+      await BackupService.InitRemote(toBindingConfig(jobConfig.value));
       await refreshStatus();
       const s = status.value;
       if (s.remoteInited && s.totalFiles > 0) {
@@ -160,9 +215,13 @@ export function useBackupJob() {
   };
 
   const resetBackupTask = async () => {
+    if (!jobConfig.value.task_id?.trim()) {
+      message.warning("请先选择备份任务");
+      return;
+    }
     const hide = message.loading("重置任务中...", 0);
     try {
-      await BackupService.ResetBackupTask(toBindingConfig(config.value));
+      await BackupService.ResetBackupTask(toBindingConfig(jobConfig.value));
       await refreshStatus();
       hide();
       message.success("任务已重置，下次备份将从第一个文件开始");
@@ -173,8 +232,12 @@ export function useBackupJob() {
   };
 
   const startBackup = async () => {
+    if (!jobConfig.value.task_id?.trim()) {
+      message.warning("请先添加并选择备份任务");
+      return;
+    }
     try {
-      await BackupService.StartBackup(toBindingConfig(config.value));
+      await BackupService.StartBackup(toBindingConfig(jobConfig.value));
       message.success("备份流水线已启动");
       await refreshStatus();
     } catch (err) {
@@ -216,11 +279,18 @@ export function useBackupJob() {
 
   return {
     config,
+    tasks,
+    activeTaskId,
+    activeTask,
+    jobConfig,
     configPath,
     status,
     logs,
     settingsSaving,
     remoteInitLoading,
+    loadTasks,
+    selectTask,
+    removeTask,
     saveConnectionConfig,
     savePathsConfig,
     testConnection,

@@ -41,10 +41,13 @@ func prepareBackupJob(cfg model.BackupConfig) (model.BackupConfig, error) {
 		return cfg, fmt.Errorf("远程应用目录不能为空")
 	}
 	if cfg.RemoteSource == "" {
-		return cfg, fmt.Errorf("远程源目录不能为空")
+		return cfg, fmt.Errorf("远程源目录不能为空，请先添加并选择备份任务")
 	}
 	if cfg.LocalDir == "" {
-		return cfg, fmt.Errorf("本机保存目录不能为空")
+		return cfg, fmt.Errorf("本机保存目录不能为空，请先添加并选择备份任务")
+	}
+	if strings.TrimSpace(cfg.TaskID) == "" {
+		return cfg, fmt.Errorf("请先选择备份任务")
 	}
 	cfg.RemoteSrv = ""
 	cfg.RemoteState = ""

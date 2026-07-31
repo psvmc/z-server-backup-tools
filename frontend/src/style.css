@@ -216,7 +216,9 @@ body {
 }
 
 .backup-settings-modal .ant-modal-body {
-  overflow: visible;
+  max-height: calc(100vh - 200px);
+  overflow-x: hidden;
+  overflow-y: auto;
   padding-top: 12px;
   padding-bottom: 16px;
 }

@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
-import type { BackupConfig, JobStatus } from "../types/backup";
+import type { BackupConfig, BackupTask, JobStatus } from "../types/backup";
 import { formatBytes } from "../utils/size";
 import BackupLocalPartsModal from "./BackupLocalPartsModal.vue";
+import BackupTaskList from "./BackupTaskList.vue";
 
 const props = defineProps<{
   status: JobStatus;
   config: BackupConfig;
+  jobConfig: BackupConfig;
+  tasks: BackupTask[];
+  activeTaskId: string;
   phaseLabel: string;
   elapsedText: string;
   remainingText: string;
@@ -21,7 +25,13 @@ defineEmits<{
   init: [];
   reset: [];
   openSettings: [];
+  addTask: [];
+  editTask: [task: BackupTask];
+  selectTask: [id: string];
+  removeTask: [task: BackupTask];
 }>();
+
+const hasActiveTask = computed(() => !!props.activeTaskId?.trim());
 
 const progressPercent = computed(() => {
   if (!props.status.totalFiles) return 0;
@@ -113,7 +123,7 @@ watch(autoScrollLog, (on) => {
             <a-button
               type="default"
               size="small"
-              :disabled="status.running || !!initLoading"
+              :disabled="status.running || !!initLoading || !hasActiveTask"
               @click="$emit('init')"
             >
               远程 init
@@ -122,6 +132,16 @@ watch(autoScrollLog, (on) => {
         </div>
 
         <div class="panel-card-body backup-run-panel__body">
+          <BackupTaskList
+            :tasks="tasks"
+            :active-task-id="activeTaskId"
+            :disabled="status.running || !!initLoading"
+            @add="$emit('addTask')"
+            @edit="$emit('editTask', $event)"
+            @select="$emit('selectTask', $event)"
+            @remove="$emit('removeTask', $event)"
+          />
+
           <div class="backup-run-panel__main">
             <div class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
               <div class="rounded-lg border border-emerald-100/80 bg-white/60 px-3 py-2">
@@ -174,20 +194,20 @@ watch(autoScrollLog, (on) => {
             <a-progress :percent="progressPercent" size="small" status="active" />
 
             <div class="flex flex-wrap gap-2 items-center">
-              <a-button type="primary" :disabled="status.running" @click="$emit('start')">{{ startBackupLabel }}</a-button>
+              <a-button type="primary" :disabled="status.running || !hasActiveTask" @click="$emit('start')">{{ startBackupLabel }}</a-button>
               <a-button danger :disabled="!status.running" @click="$emit('stop')">停止</a-button>
-              <a-button @click="$emit('refresh')">刷新状态</a-button>
+              <a-button :disabled="!hasActiveTask" @click="$emit('refresh')">刷新状态</a-button>
               <a-popconfirm
                 title="重置远程备份进度？保留文件清单，下次将从第一个文件重新打包。不会删除本机已下载文件。"
                 ok-text="重置"
                 cancel-text="取消"
-                :disabled="status.running || !status.remoteInited"
+                :disabled="status.running || !status.remoteInited || !hasActiveTask"
                 @confirm="$emit('reset')"
               >
-                <a-button :disabled="status.running || !status.remoteInited">重置任务</a-button>
+                <a-button :disabled="status.running || !status.remoteInited || !hasActiveTask">重置任务</a-button>
               </a-popconfirm>
               <div class="backup-toolbar-trailing">
-                <a-button :disabled="!config.local_dir?.trim()" @click="localPartsOpen = true">任务查看</a-button>
+                <a-button :disabled="!jobConfig.local_dir?.trim()" @click="localPartsOpen = true">任务查看</a-button>
                 <a-checkbox v-model:checked="autoScrollLog">自动滚动</a-checkbox>
               </div>
             </div>
@@ -202,7 +222,7 @@ watch(autoScrollLog, (on) => {
       </div>
     </a-spin>
 
-    <BackupLocalPartsModal v-model:open="localPartsOpen" :config="config" />
+    <BackupLocalPartsModal v-model:open="localPartsOpen" :config="jobConfig" />
   </section>
 </template>
 

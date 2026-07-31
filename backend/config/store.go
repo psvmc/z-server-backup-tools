@@ -15,6 +15,8 @@ const appConfigDir = "z-server-backup-tools"
 type diskConfig struct {
 	SkippedUpdateVersion string                    `json:"skippedUpdateVersion,omitempty"`
 	Backup               model.BackupConfig        `json:"backup"`
+	BackupTasks          []model.BackupTask        `json:"backupTasks,omitempty"`
+	ActiveTaskID         string                    `json:"activeTaskId,omitempty"`
 	BackupTiming         model.BackupTimingSession `json:"backupTiming,omitempty"`
 }
 
@@ -23,6 +25,8 @@ type Store struct {
 	filePath             string
 	SkippedUpdateVersion string
 	Backup               model.BackupConfig
+	BackupTasks          []model.BackupTask
+	ActiveTaskID         string
 	BackupTiming         model.BackupTimingSession
 }
 
@@ -73,14 +77,49 @@ func (s *Store) load() error {
 	}
 	s.SkippedUpdateVersion = payload.SkippedUpdateVersion
 	s.Backup = payload.Backup
+	s.BackupTasks = payload.BackupTasks
+	s.ActiveTaskID = payload.ActiveTaskID
 	s.BackupTiming = payload.BackupTiming
+	if s.migrateLegacyTask() {
+		return s.save()
+	}
 	return nil
+}
+
+func (s *Store) migrateLegacyTask() bool {
+	if len(s.BackupTasks) > 0 {
+		return false
+	}
+	src := strings.TrimSpace(s.Backup.RemoteSource)
+	local := strings.TrimSpace(s.Backup.LocalDir)
+	prefix := strings.TrimSpace(s.Backup.PartNamePrefix)
+	if src == "" && local == "" && prefix == "" {
+		return false
+	}
+	task := model.BackupTask{
+		ID:             "default",
+		Name:           "默认任务",
+		RemoteSource:   src,
+		LocalDir:       local,
+		PartNamePrefix: prefix,
+	}
+	s.BackupTasks = []model.BackupTask{task}
+	if strings.TrimSpace(s.ActiveTaskID) == "" {
+		s.ActiveTaskID = task.ID
+	}
+	s.Backup.RemoteSource = ""
+	s.Backup.LocalDir = ""
+	s.Backup.PartNamePrefix = ""
+	s.Backup.TaskID = ""
+	return true
 }
 
 func (s *Store) save() error {
 	payload := diskConfig{
 		SkippedUpdateVersion: s.SkippedUpdateVersion,
 		Backup:               s.Backup,
+		BackupTasks:          s.BackupTasks,
+		ActiveTaskID:         s.ActiveTaskID,
 		BackupTiming:         s.BackupTiming,
 	}
 	data, err := json.MarshalIndent(payload, "", "  ")
@@ -153,5 +192,39 @@ func (s *Store) ClearBackupTiming() error {
 		return err
 	}
 	s.BackupTiming = model.BackupTimingSession{}
+	return s.save()
+}
+
+func (s *Store) GetBackupTasks() []model.BackupTask {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]model.BackupTask, len(s.BackupTasks))
+	copy(out, s.BackupTasks)
+	return out
+}
+
+func (s *Store) SetBackupTasks(tasks []model.BackupTask) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.load(); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	s.BackupTasks = tasks
+	return s.save()
+}
+
+func (s *Store) GetActiveTaskID() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return strings.TrimSpace(s.ActiveTaskID)
+}
+
+func (s *Store) SetActiveTaskID(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.load(); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	s.ActiveTaskID = strings.TrimSpace(id)
 	return s.save()
 }

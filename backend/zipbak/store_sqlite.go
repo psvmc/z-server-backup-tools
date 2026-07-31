@@ -13,7 +13,7 @@ import (
 
 const (
 	metaRowID     = 1
-	schemaVersion = 3
+	schemaVersion = 4
 )
 
 // Store persists backup progress and the file manifest in SQLite.
@@ -30,6 +30,7 @@ type metaRow struct {
 	PendingZip     string
 	PrefetchZip    string
 	PartSerial     int
+	PartNamePrefix string
 	Done           bool
 	FileCount      int
 }
@@ -97,6 +98,7 @@ func (s *Store) ensureSchema() error {
 			pending_zip TEXT NOT NULL DEFAULT '',
 			prefetch_zip TEXT NOT NULL DEFAULT '',
 			part_serial INTEGER NOT NULL DEFAULT 0,
+			part_name_prefix TEXT NOT NULL DEFAULT '',
 			done INTEGER NOT NULL DEFAULT 0,
 			file_count INTEGER NOT NULL DEFAULT 0
 		)`,
@@ -145,6 +147,15 @@ func (s *Store) applySchemaMigrations(ver int) error {
 			return err
 		}
 		ver = 3
+	}
+	if ver < 4 {
+		if err := s.ensurePartNamePrefixColumn(); err != nil {
+			return err
+		}
+		if _, err := s.db.Exec(`UPDATE schema_info SET version = 4 WHERE id = 1`); err != nil {
+			return err
+		}
+		ver = 4
 	}
 	if ver != schemaVersion {
 		return fmt.Errorf("不支持的 state 数据库版本 %d", ver)
@@ -212,7 +223,37 @@ func (s *Store) ensurePrefetchZipColumn() error {
 	return err
 }
 
-func (s *Store) Init(sourceDir, stagingDir string, files []ManifestEntry) error {
+func (s *Store) ensurePartNamePrefixColumn() error {
+	rows, err := s.db.Query(`PRAGMA table_info(meta)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	has := false
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return err
+		}
+		if name == "part_name_prefix" {
+			has = true
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	_, err = s.db.Exec(`ALTER TABLE meta ADD COLUMN part_name_prefix TEXT NOT NULL DEFAULT ''`)
+	return err
+}
+
+func (s *Store) Init(sourceDir, stagingDir, partPrefix string, files []ManifestEntry) error {
 	sourceDir = filepath.Clean(sourceDir)
 	stagingDir = filepath.Clean(stagingDir)
 	ctx := context.Background()
@@ -233,9 +274,9 @@ func (s *Store) Init(sourceDir, stagingDir string, files []ManifestEntry) error 
 	if len(files) == 0 {
 		done = 1
 	}
-	_, err = tx.Exec(`INSERT INTO meta(id, source_dir, staging_dir, max_part_bytes, next_file_index, pending_zip, part_serial, done, file_count)
-		VALUES (1, ?, ?, 0, 0, '', 0, ?, ?)`,
-		sourceDir, stagingDir, done, len(files))
+	_, err = tx.Exec(`INSERT INTO meta(id, source_dir, staging_dir, max_part_bytes, next_file_index, pending_zip, prefetch_zip, part_serial, part_name_prefix, done, file_count)
+		VALUES (1, ?, ?, 0, 0, '', '', 0, ?, ?, ?)`,
+		sourceDir, stagingDir, SanitizePartPrefix(partPrefix), done, len(files))
 	if err != nil {
 		return err
 	}
@@ -256,9 +297,9 @@ func (s *Store) Init(sourceDir, stagingDir string, files []ManifestEntry) error 
 func (s *Store) loadMeta() (metaRow, error) {
 	var m metaRow
 	var done int
-	err := s.db.QueryRow(`SELECT source_dir, staging_dir, max_part_bytes, next_file_index, pending_zip, prefetch_zip, part_serial, done, file_count
+	err := s.db.QueryRow(`SELECT source_dir, staging_dir, max_part_bytes, next_file_index, pending_zip, prefetch_zip, part_serial, part_name_prefix, done, file_count
 		FROM meta WHERE id = 1`).Scan(
-		&m.SourceDir, &m.StagingDir, &m.MaxPartBytes, &m.NextFileIndex, &m.PendingZip, &m.PrefetchZip, &m.PartSerial, &done, &m.FileCount,
+		&m.SourceDir, &m.StagingDir, &m.MaxPartBytes, &m.NextFileIndex, &m.PendingZip, &m.PrefetchZip, &m.PartSerial, &m.PartNamePrefix, &done, &m.FileCount,
 	)
 	if err == sql.ErrNoRows {
 		return m, fmt.Errorf("state 未初始化，请先 init")

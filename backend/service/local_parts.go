@@ -7,11 +7,12 @@ import (
 	"strings"
 
 	"z-server-backup-tools/backend/model"
+	"z-server-backup-tools/backend/zipbak"
 )
 
 const localPartDownloadingSuffix = ".downloading"
 
-func listLocalPartFiles(localDir string) (model.LocalPartListing, error) {
+func listLocalPartFiles(localDir, partPrefix string) (model.LocalPartListing, error) {
 	out := model.LocalPartListing{LocalDir: localDir}
 	localDir = strings.TrimSpace(localDir)
 	if localDir == "" {
@@ -37,7 +38,7 @@ func listLocalPartFiles(localDir string) (model.LocalPartListing, error) {
 			state = "downloading"
 			displayName = strings.TrimSuffix(name, localPartDownloadingSuffix)
 		}
-		if !isBackupPartName(displayName) {
+		if !zipbak.IsBackupPartName(displayName, partPrefix) {
 			continue
 		}
 		info, err := ent.Info()
@@ -56,16 +57,15 @@ func listLocalPartFiles(localDir string) (model.LocalPartListing, error) {
 	return out, nil
 }
 
-func isBackupPartName(name string) bool {
-	lower := strings.ToLower(name)
-	return strings.HasPrefix(lower, "part-") && strings.HasSuffix(lower, ".zip")
-}
-
-// ListLocalParts scans local_dir for completed part-*.zip and *.zip.downloading files.
 func (s *BackupService) ListLocalParts(cfg model.BackupConfig) (model.LocalPartListing, error) {
 	dir := strings.TrimSpace(cfg.LocalDir)
+	prefix := zipbak.SanitizePartPrefix(cfg.PartNamePrefix)
 	if dir == "" {
-		dir = strings.TrimSpace(s.storedConfig().LocalDir)
+		stored := s.storedConfig()
+		dir = strings.TrimSpace(stored.LocalDir)
+		if prefix == "" {
+			prefix = zipbak.SanitizePartPrefix(stored.PartNamePrefix)
+		}
 	}
-	return listLocalPartFiles(dir)
+	return listLocalPartFiles(dir, prefix)
 }

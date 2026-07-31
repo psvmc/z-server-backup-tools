@@ -10,7 +10,22 @@ export interface BackupConfig {
   remote_staging?: string;
   local_dir: string;
   max_part_gb: number;
+  part_name_prefix?: string;
+  task_id?: string;
+  notify_email?: string;
+  smtp_host?: string;
+  smtp_port?: number;
+  smtp_user?: string;
+  smtp_password?: string;
   known_hosts_file?: string;
+}
+
+export interface BackupTask {
+  id: string;
+  name?: string;
+  remote_source: string;
+  local_dir: string;
+  part_name_prefix?: string;
 }
 
 export interface JobStatus {
@@ -57,7 +72,35 @@ export function remotePathsFromAppDir(appDir: string) {
   }
   return {
     srv: `${base}\\zipbak-srv.exe`,
-    state: `${base}\\data\\state.db`,
-    staging: `${base}\\staging`,
+    state: `${base}\\data\\state-{任务ID}.db`,
+    staging: `${base}\\staging-{任务ID}`,
   };
+}
+
+export function mergeTaskConfig(base: BackupConfig, task?: BackupTask | null): BackupConfig {
+  if (!task) {
+    return { ...base, remote_source: "", local_dir: "", part_name_prefix: "", task_id: "" };
+  }
+  return {
+    ...base,
+    task_id: task.id,
+    remote_source: task.remote_source ?? "",
+    local_dir: task.local_dir ?? "",
+    part_name_prefix: task.part_name_prefix ?? "",
+  };
+}
+
+export function taskDisplayName(task: BackupTask): string {
+  const name = task.name?.trim();
+  if (name) return name;
+  const src = task.remote_source?.trim();
+  if (src) return src;
+  return task.id;
+}
+
+export function newTaskId(): string {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+  }
+  return `task-${Date.now().toString(36)}`;
 }

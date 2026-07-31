@@ -19,6 +19,13 @@ type BackupConfig struct {
 	RemoteStaging  string  `json:"remote_staging,omitempty"`
 	LocalDir       string  `json:"local_dir"`
 	MaxPartGB      float64 `json:"max_part_gb"`
+	PartNamePrefix string  `json:"part_name_prefix,omitempty"`
+	TaskID         string  `json:"task_id,omitempty"`
+	NotifyEmail    string  `json:"notify_email,omitempty"`
+	SmtpHost       string  `json:"smtp_host,omitempty"`
+	SmtpPort       int     `json:"smtp_port,omitempty"`
+	SmtpUser       string  `json:"smtp_user,omitempty"`
+	SmtpPassword   string  `json:"smtp_password,omitempty"`
 	KnownHostsFile string  `json:"known_hosts_file,omitempty"`
 }
 
@@ -38,7 +45,26 @@ func (c BackupConfig) Resolved() BackupConfig {
 	}
 	base := util.NormalizeRemotePath(app)
 	out.RemoteSrv = util.JoinRemote(base, "zipbak-srv.exe")
-	out.RemoteState = util.JoinRemote(base, "data", "state.db")
-	out.RemoteStaging = util.JoinRemote(base, "staging")
+	suffix := taskPathSuffix(c.TaskID)
+	out.RemoteState = util.JoinRemote(base, "data", "state"+suffix+".db")
+	out.RemoteStaging = util.JoinRemote(base, "staging"+suffix)
 	return out
+}
+
+func taskPathSuffix(taskID string) string {
+	id := strings.TrimSpace(taskID)
+	if id == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, r := range id {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' {
+			b.WriteRune(r)
+		}
+	}
+	s := b.String()
+	if s == "" {
+		return ""
+	}
+	return "-" + s
 }

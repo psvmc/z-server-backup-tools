@@ -17,7 +17,7 @@ func TestListLocalPartFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "readme.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	listing, err := listLocalPartFiles(dir)
+	listing, err := listLocalPartFiles(dir, "")
 	if err != nil {
 		t.Fatal(err)
 	}

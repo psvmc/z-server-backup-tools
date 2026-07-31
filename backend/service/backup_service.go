@@ -8,6 +8,7 @@ import (
 
 	"z-server-backup-tools/backend/config"
 	"z-server-backup-tools/backend/model"
+	"z-server-backup-tools/backend/notify"
 	"z-server-backup-tools/backend/remote"
 	"z-server-backup-tools/backend/sftpclient"
 	"z-server-backup-tools/backend/util"
@@ -72,6 +73,14 @@ func (s *BackupService) GetConfigPath() string {
 	return s.store.ConfigPath()
 }
 
+func (s *BackupService) OpenInExplorer(path string) error {
+	return openPathInExplorer(path)
+}
+
+func (s *BackupService) TestEmailNotification(cfg model.BackupConfig) error {
+	return notify.SendTestEmail(cfg)
+}
+
 func (s *BackupService) storedConfig() model.BackupConfig {
 	if s.store == nil {
 		return model.BackupConfig{Port: 22, MaxPartGB: 2}
@@ -107,8 +116,11 @@ func (s *BackupService) SavePathsConfig(cfg model.BackupConfig) error {
 	oldMaxPartGB := prev.MaxPartGB
 	stored := prev
 	stored.RemoteAppDir = strings.TrimSpace(cfg.RemoteAppDir)
-	stored.RemoteSource = strings.TrimSpace(cfg.RemoteSource)
-	stored.LocalDir = strings.TrimSpace(cfg.LocalDir)
+	stored.NotifyEmail = strings.TrimSpace(cfg.NotifyEmail)
+	stored.SmtpHost = strings.TrimSpace(cfg.SmtpHost)
+	stored.SmtpPort = cfg.SmtpPort
+	stored.SmtpUser = strings.TrimSpace(cfg.SmtpUser)
+	stored.SmtpPassword = cfg.SmtpPassword
 	if cfg.MaxPartGB > 0 {
 		stored.MaxPartGB = cfg.MaxPartGB
 	}
@@ -118,12 +130,6 @@ func (s *BackupService) SavePathsConfig(cfg model.BackupConfig) error {
 	if stored.RemoteAppDir == "" {
 		return fmt.Errorf("远程应用目录不能为空")
 	}
-	if stored.RemoteSource == "" {
-		return fmt.Errorf("远程源目录不能为空")
-	}
-	if stored.LocalDir == "" {
-		return fmt.Errorf("本机保存目录不能为空")
-	}
 	stored.RemoteSrv = ""
 	stored.RemoteState = ""
 	stored.RemoteStaging = ""
@@ -132,14 +138,91 @@ func (s *BackupService) SavePathsConfig(cfg model.BackupConfig) error {
 		return err
 	}
 	if maxPartGBChanged(stored.MaxPartGB, oldMaxPartGB) {
-		st, err := s.queryRemoteStatusLocked(resolved)
-		if err == nil {
-			s.mu.Lock()
-			s.applyRemoteStatus(st, false)
-			s.mu.Unlock()
+		active := s.activeTaskMerged()
+		if active.RemoteSource != "" && active.LocalDir != "" {
+			st, err := s.queryRemoteStatusLocked(active)
+			if err == nil {
+				s.mu.Lock()
+				s.applyRemoteStatus(st, false)
+				s.mu.Unlock()
+			}
 		}
 	}
 	return nil
+}
+
+func (s *BackupService) GetTasks() []model.BackupTask {
+	if s.store == nil {
+		return nil
+	}
+	return s.store.GetBackupTasks()
+}
+
+func (s *BackupService) SaveTasks(tasks []model.BackupTask) error {
+	if s.store == nil {
+		return fmt.Errorf("配置存储不可用")
+	}
+	normalized := make([]model.BackupTask, 0, len(tasks))
+	seen := make(map[string]struct{}, len(tasks))
+	for _, t := range tasks {
+		t.ID = strings.TrimSpace(t.ID)
+		t.Name = strings.TrimSpace(t.Name)
+		t.RemoteSource = strings.TrimSpace(t.RemoteSource)
+		t.LocalDir = strings.TrimSpace(t.LocalDir)
+		t.PartNamePrefix = zipbak.SanitizePartPrefix(t.PartNamePrefix)
+		if t.ID == "" {
+			return fmt.Errorf("任务 ID 不能为空")
+		}
+		if t.RemoteSource == "" {
+			return fmt.Errorf("任务 %s 的远程源目录不能为空", t.DisplayName())
+		}
+		if t.LocalDir == "" {
+			return fmt.Errorf("任务 %s 的本机保存目录不能为空", t.DisplayName())
+		}
+		if _, ok := seen[t.ID]; ok {
+			return fmt.Errorf("任务 ID 重复: %s", t.ID)
+		}
+		seen[t.ID] = struct{}{}
+		normalized = append(normalized, t)
+	}
+	return s.store.SetBackupTasks(normalized)
+}
+
+func (s *BackupService) GetActiveTaskID() string {
+	if s.store == nil {
+		return ""
+	}
+	return s.store.GetActiveTaskID()
+}
+
+func (s *BackupService) SetActiveTaskID(taskID string) error {
+	if s.store == nil {
+		return fmt.Errorf("配置存储不可用")
+	}
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return s.store.SetActiveTaskID("")
+	}
+	for _, t := range s.store.GetBackupTasks() {
+		if t.ID == taskID {
+			return s.store.SetActiveTaskID(taskID)
+		}
+	}
+	return fmt.Errorf("任务不存在: %s", taskID)
+}
+
+func (s *BackupService) activeTaskMerged() model.BackupConfig {
+	base := s.storedConfig()
+	activeID := s.store.GetActiveTaskID()
+	if activeID == "" {
+		return base.Resolved()
+	}
+	for _, t := range s.store.GetBackupTasks() {
+		if t.ID == activeID {
+			return t.MergeInto(base).Resolved()
+		}
+	}
+	return base.Resolved()
 }
 
 func (s *BackupService) ListRemoteDirectories(cfg model.BackupConfig, pathHint string) (model.RemoteDirListing, error) {
@@ -196,12 +279,17 @@ func (s *BackupService) InitRemote(cfg model.BackupConfig) error {
 	source := util.NormalizeRemotePath(prepared.RemoteSource)
 	state := util.NormalizeRemotePath(prepared.RemoteState)
 	staging := util.NormalizeRemotePath(prepared.RemoteStaging)
-	_, err = cli.RunRemote(
+	prefix := zipbak.SanitizePartPrefix(prepared.PartNamePrefix)
+	args := []string{
 		"init",
 		"--dir", source,
 		"--state", state,
 		"--staging", staging,
-	)
+	}
+	if prefix != "" {
+		args = append(args, "--prefix", prefix)
+	}
+	_, err = cli.RunRemote(args...)
 	if err != nil {
 		return err
 	}
@@ -325,8 +413,8 @@ func (s *BackupService) StartBackup(cfg model.BackupConfig) error {
 	if err != nil {
 		return err
 	}
-	if s.store != nil {
-		_ = s.store.SetBackupConfig(prepared)
+	if s.store != nil && strings.TrimSpace(cfg.TaskID) != "" {
+		_ = s.store.SetActiveTaskID(cfg.TaskID)
 	}
 
 	s.mu.Lock()
@@ -380,18 +468,54 @@ func (s *BackupService) runPipeline(ctx context.Context, cfg model.BackupConfig)
 	if err := pipe.Run(ctx); err != nil {
 		s.mu.Lock()
 		s.status.LastError = err.Error()
+		st := s.status
 		s.mu.Unlock()
 		errMsg := err.Error()
 		if strings.Contains(errMsg, "任务已取消") {
 			s.appendLog("备份任务已取消")
 		} else {
 			s.appendLog("错误: " + errMsg)
+			s.sendBackupNotification(cfg, notify.BackupResult{
+				Success:      false,
+				Host:         cfg.Host,
+				RemoteSource: cfg.RemoteSource,
+				LocalDir:     cfg.LocalDir,
+				TotalFiles:   st.TotalFiles,
+				PackedFiles:  st.PackedFiles,
+				Error:        errMsg,
+			})
 		}
 		s.app.Event.Emit("backup-error", errMsg)
 		return
 	}
 	s.clearBackupTiming()
+	s.mu.Lock()
+	st := s.status
+	s.mu.Unlock()
+	s.sendBackupNotification(cfg, notify.BackupResult{
+		Success:      true,
+		Host:         cfg.Host,
+		RemoteSource: cfg.RemoteSource,
+		LocalDir:     cfg.LocalDir,
+		TotalFiles:   st.TotalFiles,
+		PackedFiles:  st.PackedFiles,
+	})
 	s.app.Event.Emit("backup-done", "ok")
+}
+
+func (s *BackupService) sendBackupNotification(cfg model.BackupConfig, result notify.BackupResult) {
+	if strings.TrimSpace(cfg.NotifyEmail) == "" {
+		return
+	}
+	if err := notify.SendBackupNotification(cfg, result); err != nil {
+		s.appendLog("通知邮件发送失败: " + err.Error())
+		return
+	}
+	if result.Success {
+		s.appendLog("已发送备份完成通知邮件至 " + cfg.NotifyEmail)
+	} else {
+		s.appendLog("已发送备份异常通知邮件至 " + cfg.NotifyEmail)
+	}
 }
 
 func (s *BackupService) appendLog(line string) {

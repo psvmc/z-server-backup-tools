@@ -9,7 +9,7 @@ import (
 	"z-server-backup-tools/backend/util"
 )
 
-func InitState(sourceDir, statePath, stagingDir string) (*State, error) {
+func InitState(sourceDir, statePath, stagingDir, partPrefix string) (*State, error) {
 	sourceDir = filepath.Clean(sourceDir)
 	stagingDir = filepath.Clean(stagingDir)
 	statePath = NormalizeStatePath(statePath)
@@ -25,7 +25,7 @@ func InitState(sourceDir, statePath, stagingDir string) (*State, error) {
 		return nil, err
 	}
 	defer store.Close()
-	if err := store.Init(sourceDir, stagingDir, files); err != nil {
+	if err := store.Init(sourceDir, stagingDir, partPrefix, files); err != nil {
 		return nil, err
 	}
 	return &State{

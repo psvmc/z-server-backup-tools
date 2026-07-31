@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { message } from "ant-design-vue";
+import { BackupService } from "../../bindings/z-server-backup-tools/backend/service";
 import type { BackupConfig } from "../types/backup";
+import { formatError } from "../types/update";
 import BackupConfigPanel from "./BackupConfigPanel.vue";
 
 const open = defineModel<boolean>("open", { required: true });
@@ -20,19 +23,29 @@ function onSavePaths() {
   if (props.saving) return;
   emit("savePaths", { ...config.value });
 }
+
+async function openConfigFolder() {
+  const path = props.configPath?.trim();
+  if (!path) return;
+  try {
+    await BackupService.OpenInExplorer(path);
+  } catch (err) {
+    message.error(formatError(err));
+  }
+}
 </script>
 
 <template>
   <a-modal
     v-model:open="open"
-    title="连接与路径"
+    title="设置"
     :width="920"
     wrap-class-name="backup-settings-modal"
     :mask-closable="false"
     :closable="!props.saving"
     :keyboard="!props.saving"
     centered
-    :body-style="{ overflow: 'visible', maxHeight: 'none' }"
+    :body-style="{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto', overflowX: 'hidden' }"
   >
     <a-spin :spinning="!!props.saving" tip="保存中…" class="settings-save-spin">
       <BackupConfigPanel
@@ -52,6 +65,7 @@ function onSavePaths() {
         >
           配置文件：{{ props.configPath }}
         </div>
+        <a-button v-if="props.configPath" @click="openConfigFolder">打开所在文件夹</a-button>
         <a-button type="primary" :loading="props.saving" :disabled="props.saving" @click="onSavePaths">
           保存配置
         </a-button>
