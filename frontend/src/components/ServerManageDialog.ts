@@ -6,7 +6,12 @@ import {
   Server as ServerBinding,
 } from "../../bindings/z-server-backup-tools/backend/model/models";
 import type { Server } from "../types/backup";
-import { applyServer, emptyNotifyConfig, remotePathsFromAppDir } from "../types/backup";
+import {
+  applyServer,
+  emptyNotifyConfig,
+  normalizeServerOSType,
+  remotePathsFromAppDir,
+} from "../types/backup";
 import { formatError } from "../types/update";
 
 export type ServerManageDialogEmit = {
@@ -20,6 +25,7 @@ export type ServerForm = {
   port: number;
   user: string;
   password: string;
+  os_type: string;
   support_multi_file: boolean;
   remote_app_dir: string;
   max_part_gb: number;
@@ -33,6 +39,7 @@ function emptyServerForm(): ServerForm {
     port: 22,
     user: "",
     password: "",
+    os_type: "windows",
     support_multi_file: false,
     remote_app_dir: "",
     max_part_gb: 2,
@@ -54,6 +61,7 @@ function toBindingConfig(cfg: ReturnType<typeof applyServer>) {
 export const serverTableColumns = [
   { title: "名称", dataIndex: "name", key: "name", ellipsis: true },
   { title: "主机", key: "host", ellipsis: true },
+  { title: "类型", key: "os_type", width: 90 },
   { title: "多文件支持", key: "support_multi_file", width: 110 },
   { title: "操作", key: "actions", width: 140 },
 ];
@@ -68,7 +76,13 @@ export function useServerManageDialog(open: Ref<boolean>, emit: ServerManageDial
   const remotePickerOpen = ref(false);
 
   const isEdit = computed(() => !!form.value.id);
-  const derivedPaths = computed(() => remotePathsFromAppDir(form.value.remote_app_dir));
+  const isLinux = computed(() => normalizeServerOSType(form.value.os_type) === "linux");
+  const derivedPaths = computed(() =>
+    remotePathsFromAppDir(form.value.remote_app_dir, form.value.os_type),
+  );
+  const appDirPlaceholder = computed(() =>
+    isLinux.value ? "可手动输入，如 /opt/zipbak" : "可手动输入，如 D:\\Tools\\zipbak",
+  );
   const formConnection = computed(() =>
     applyServer(emptyNotifyConfig(), {
       id: form.value.id,
@@ -77,6 +91,7 @@ export function useServerManageDialog(open: Ref<boolean>, emit: ServerManageDial
       port: form.value.port,
       user: form.value.user,
       password: form.value.password,
+      os_type: normalizeServerOSType(form.value.os_type),
       support_multi_file: form.value.support_multi_file,
       remote_app_dir: form.value.remote_app_dir,
       max_part_gb: form.value.max_part_gb,
@@ -127,6 +142,7 @@ export function useServerManageDialog(open: Ref<boolean>, emit: ServerManageDial
       port: srv.port || 22,
       user: srv.user ?? "",
       password: srv.password ?? "",
+      os_type: normalizeServerOSType(srv.os_type),
       support_multi_file: !!srv.support_multi_file,
       remote_app_dir: srv.remote_app_dir ?? "",
       max_part_gb: srv.max_part_gb && srv.max_part_gb > 0 ? srv.max_part_gb : 2,
@@ -207,6 +223,7 @@ export function useServerManageDialog(open: Ref<boolean>, emit: ServerManageDial
         port: form.value.port && form.value.port > 0 ? form.value.port : 22,
         user: form.value.user.trim(),
         password: form.value.password ?? "",
+        os_type: normalizeServerOSType(form.value.os_type),
         support_multi_file: !!form.value.support_multi_file,
         remote_app_dir: form.value.support_multi_file ? form.value.remote_app_dir.trim() : "",
         max_part_gb: form.value.support_multi_file ? form.value.max_part_gb || 0 : 0,
@@ -245,6 +262,7 @@ export function useServerManageDialog(open: Ref<boolean>, emit: ServerManageDial
     remotePickerOpen,
     isEdit,
     derivedPaths,
+    appDirPlaceholder,
     formConnection,
     rows,
     openAdd,

@@ -281,6 +281,15 @@ func (s *BackupService) activeTaskMerged() model.BackupConfig {
 }
 
 func (s *BackupService) ListRemoteDirectories(cfg model.BackupConfig, pathHint string) (model.RemoteDirListing, error) {
+	return s.listRemote(cfg, pathHint, true)
+}
+
+// ListRemoteEntries lists directories and files under pathHint (SFTP).
+func (s *BackupService) ListRemoteEntries(cfg model.BackupConfig, pathHint string) (model.RemoteDirListing, error) {
+	return s.listRemote(cfg, pathHint, false)
+}
+
+func (s *BackupService) listRemote(cfg model.BackupConfig, pathHint string, dirsOnly bool) (model.RemoteDirListing, error) {
 	out := model.RemoteDirListing{}
 	prepared, err := prepareSSH(cfg)
 	if err != nil {
@@ -292,15 +301,19 @@ func (s *BackupService) ListRemoteDirectories(cfg model.BackupConfig, pathHint s
 	}
 	defer cli.Close()
 
-	current, parent, names, err := cli.ListDirectories(pathHint)
+	current, parent, listed, err := cli.ListEntries(pathHint, prepared.OSType)
 	if err != nil {
 		return out, err
 	}
-	entries := make([]model.RemoteDirEntry, 0, len(names))
-	for _, name := range names {
+	entries := make([]model.RemoteDirEntry, 0, len(listed))
+	for _, item := range listed {
+		if dirsOnly && !item.IsDir {
+			continue
+		}
 		entries = append(entries, model.RemoteDirEntry{
-			Name: name,
-			Path: sftpclient.JoinRemoteDirPublic(current, name),
+			Name:  item.Name,
+			Path:  sftpclient.JoinRemotePath(current, item.Name, prepared.OSType),
+			IsDir: item.IsDir,
 		})
 	}
 	out.CurrentPath = current

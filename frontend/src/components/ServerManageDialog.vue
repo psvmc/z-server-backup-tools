@@ -18,6 +18,7 @@ const {
   remotePickerOpen,
   isEdit,
   derivedPaths,
+  appDirPlaceholder,
   formConnection,
   rows,
   openAdd,
@@ -60,6 +61,9 @@ const {
           <template v-if="column.key === 'host'">
             {{ record.host }}{{ record.port ? `:${record.port}` : "" }}
           </template>
+          <template v-else-if="column.key === 'os_type'">
+            {{ record.os_type === "linux" ? "Linux" : "Windows" }}
+          </template>
           <template v-else-if="column.key === 'support_multi_file'">
             {{ record.support_multi_file ? "是" : "否" }}
           </template>
@@ -99,6 +103,13 @@ const {
         <a-input v-model:value="form.name" placeholder="便于识别的名称" allow-clear />
       </a-form-item>
 
+      <a-form-item label="服务器类型" required>
+        <a-radio-group v-model:value="form.os_type">
+          <a-radio value="windows">Windows</a-radio>
+          <a-radio value="linux">Linux</a-radio>
+        </a-radio-group>
+      </a-form-item>
+
       <section class="settings-block">
         <div class="settings-block-title">SSH 连接</div>
         <div class="config-form-grid config-form-grid--conn">
@@ -136,7 +147,7 @@ const {
             <PathPickInput
               v-model="form.remote_app_dir"
               editable
-              placeholder="可手动输入，如 D:\Tools\zipbak"
+              :placeholder="appDirPlaceholder"
               @browse="openRemotePicker"
             />
           </a-form-item>

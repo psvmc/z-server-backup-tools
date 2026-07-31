@@ -3,6 +3,7 @@ export interface BackupConfig {
   port: number;
   user: string;
   password: string;
+  os_type?: string;
   remote_app_dir: string;
   remote_srv?: string;
   remote_state?: string;
@@ -27,6 +28,7 @@ export interface Server {
   port: number;
   user: string;
   password: string;
+  os_type: string;
   support_multi_file: boolean;
   remote_app_dir?: string;
   max_part_gb?: number;
@@ -84,6 +86,10 @@ export interface LocalPartListing {
   files: LocalPartFile[];
 }
 
+export function normalizeServerOSType(osType?: string): "windows" | "linux" {
+  return (osType ?? "").trim().toLowerCase() === "linux" ? "linux" : "windows";
+}
+
 export function emptyNotifyConfig(): BackupConfig {
   return {
     host: "",
@@ -97,7 +103,17 @@ export function emptyNotifyConfig(): BackupConfig {
   };
 }
 
-export function remotePathsFromAppDir(appDir: string) {
+export function remotePathsFromAppDir(appDir: string, osType?: string) {
+  const linux = normalizeServerOSType(osType) === "linux";
+  if (linux) {
+    const base = appDir.trim().replace(/\\/g, "/").replace(/\/+$/, "") || "";
+    if (!base) return { srv: "", state: "", staging: "" };
+    return {
+      srv: `${base}/zipbak-srv`,
+      state: `${base}/data/state-{任务ID}.db`,
+      staging: `${base}/staging-{任务ID}`,
+    };
+  }
   const base = appDir.trim().replace(/\//g, "\\").replace(/\\+$/, "");
   if (!base) {
     return { srv: "", state: "", staging: "" };
@@ -111,7 +127,15 @@ export function remotePathsFromAppDir(appDir: string) {
 
 export function applyServer(base: BackupConfig, server?: Server | null): BackupConfig {
   if (!server) {
-    return { ...base, host: "", user: "", password: "", remote_app_dir: "", max_part_gb: 0 };
+    return {
+      ...base,
+      host: "",
+      user: "",
+      password: "",
+      os_type: undefined,
+      remote_app_dir: "",
+      max_part_gb: 0,
+    };
   }
   return {
     ...base,
@@ -119,6 +143,7 @@ export function applyServer(base: BackupConfig, server?: Server | null): BackupC
     port: server.port || 22,
     user: server.user,
     password: server.password,
+    os_type: normalizeServerOSType(server.os_type),
     remote_app_dir: server.remote_app_dir ?? "",
     max_part_gb: server.max_part_gb || 2,
   };

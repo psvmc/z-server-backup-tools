@@ -84,6 +84,7 @@ func normalizeServer(srv model.Server) (model.Server, error) {
 	srv.Host = strings.TrimSpace(srv.Host)
 	srv.User = strings.TrimSpace(srv.User)
 	srv.RemoteAppDir = strings.TrimSpace(srv.RemoteAppDir)
+	srv.OSType = model.NormalizeOSType(srv.OSType)
 	if srv.Name == "" {
 		return model.Server{}, fmt.Errorf("服务器名称不能为空")
 	}

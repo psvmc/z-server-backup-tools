@@ -1,104 +1,51 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
-import { message } from "ant-design-vue";
-import { BackupService } from "../../bindings/z-server-backup-tools/backend/service";
-import { BackupConfig as BackupConfigBinding } from "../../bindings/z-server-backup-tools/backend/model/models";
 import type { BackupConfig } from "../types/backup";
-import { formatError } from "../types/update";
+import { useRemoteDirPicker, type RemotePickerMode } from "./RemoteDirPickerModal";
 
 const open = defineModel<boolean>("open", { required: true });
 
-const props = defineProps<{
-  connection: BackupConfig;
-  initialPath?: string;
-  title?: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    connection: BackupConfig;
+    initialPath?: string;
+    title?: string;
+    mode?: RemotePickerMode;
+  }>(),
+  {
+    mode: "directory",
+  },
+);
 
 const emit = defineEmits<{
   select: [path: string];
 }>();
 
-const loading = ref(false);
-const currentPath = ref("");
-const parentPath = ref("");
-const entries = ref<{ name: string; path: string }[]>([]);
-const jumpPath = ref("");
-
-const atDriveList = computed(() => !currentPath.value.trim());
-
-function toBinding(cfg: BackupConfig) {
-  return BackupConfigBinding.createFrom(JSON.parse(JSON.stringify(cfg)));
-}
-
-async function load(pathHint: string) {
-  loading.value = true;
-  try {
-    const listing = await BackupService.ListRemoteDirectories(toBinding(props.connection), pathHint);
-    currentPath.value = listing.current_path ?? "";
-    parentPath.value = listing.parent_path ?? "";
-    entries.value = (listing.entries ?? []).map((e) => ({
-      name: e.name ?? "",
-      path: e.path ?? "",
-    }));
-    jumpPath.value = currentPath.value;
-  } catch (err) {
-    message.error(formatError(err));
-  } finally {
-    loading.value = false;
-  }
-}
-
-watch(
-  () => open.value,
-  (visible) => {
-    if (visible) {
-      void load(props.initialPath?.trim() || "");
-    }
-  },
-);
-
-function enterDir(path: string) {
-  void load(path);
-}
-
-function goParent() {
-  if (atDriveList.value) return;
-  void load(parentPath.value || "");
-}
-
-function goDriveList() {
-  void load("");
-}
-
-function jumpToPath() {
-  const target = jumpPath.value.trim();
-  if (!target) {
-    void load("");
-    return;
-  }
-  void load(target);
-}
-
-function confirmCurrent() {
-  const picked = currentPath.value.trim();
-  if (!picked) {
-    message.warning(atDriveList.value ? "请先选择盘符并进入目录" : "请先进入要选中的目录");
-    return;
-  }
-  emit("select", picked);
-  open.value = false;
-}
-
-function confirmEntry(path: string) {
-  emit("select", path);
-  open.value = false;
-}
+const {
+  loading,
+  entries,
+  jumpPath,
+  atRoot,
+  isFileMode,
+  currentLabel,
+  jumpPlaceholder,
+  rootButtonLabel,
+  modalTitle,
+  hintText,
+  emptyText,
+  onItemActivate,
+  goParent,
+  goRoot,
+  jumpToPath,
+  confirmCurrent,
+  confirmEntry,
+  showSelectButton,
+} = useRemoteDirPicker(open, props, emit);
 </script>
 
 <template>
   <a-modal
     v-model:open="open"
-    :title="title ?? '选择远程目录'"
+    :title="modalTitle"
     width="560px"
     wrap-class-name="remote-dir-picker-modal"
     :footer="null"
@@ -108,23 +55,31 @@ function confirmEntry(path: string) {
     <div class="remote-dir-picker">
       <div class="flex flex-wrap items-center gap-2 text-xs text-gray-600 shrink-0">
         <span class="font-medium text-emerald-900">当前：</span>
-        <span class="break-all">{{ atDriveList ? "（盘符列表）" : currentPath }}</span>
+        <span class="break-all">{{ currentLabel }}</span>
       </div>
 
       <div class="flex gap-2 shrink-0">
         <a-input
           v-model:value="jumpPath"
           size="small"
-          placeholder="手动输入路径，如 D:\Tools\zipbak"
+          :placeholder="jumpPlaceholder"
           @press-enter="jumpToPath"
         />
         <a-button size="small" :loading="loading" @click="jumpToPath">跳转</a-button>
       </div>
 
       <div class="flex flex-wrap gap-2 shrink-0">
-        <a-button size="small" :disabled="loading || atDriveList" @click="goParent">上级目录</a-button>
-        <a-button size="small" :disabled="loading || atDriveList" @click="goDriveList">盘符列表</a-button>
-        <a-button size="small" type="primary" :loading="loading" @click="confirmCurrent">选中当前目录</a-button>
+        <a-button size="small" :disabled="loading || atRoot" @click="goParent">上级目录</a-button>
+        <a-button size="small" :disabled="loading || atRoot" @click="goRoot">{{ rootButtonLabel }}</a-button>
+        <a-button
+          v-if="!isFileMode"
+          size="small"
+          type="primary"
+          :loading="loading"
+          @click="confirmCurrent"
+        >
+          选中当前目录
+        </a-button>
       </div>
 
       <a-spin :spinning="loading" class="remote-dir-picker__spin">
@@ -134,12 +89,12 @@ function confirmEntry(path: string) {
             :key="item.path"
             type="button"
             class="remote-dir-list__item"
-            @dblclick="enterDir(item.path)"
-            @click="enterDir(item.path)"
+            @dblclick="onItemActivate(item)"
+            @click="onItemActivate(item)"
           >
             <span class="remote-dir-list__name">{{ item.name }}</span>
             <a-button
-              v-if="!atDriveList"
+              v-if="showSelectButton(item)"
               type="link"
               size="small"
               class="shrink-0"
@@ -149,13 +104,13 @@ function confirmEntry(path: string) {
             </a-button>
           </button>
           <div v-if="!loading && entries.length === 0" class="text-xs text-gray-400 py-6 text-center">
-            {{ atDriveList ? "未发现可用盘符" : "此目录下没有子文件夹" }}
+            {{ emptyText }}
           </div>
         </div>
       </a-spin>
 
       <p class="text-xs text-gray-400 mb-0 shrink-0">
-        {{ atDriveList ? "点击盘符进入；也可在上方手动输入完整路径。" : "单击文件夹进入；点「选中」确认路径。" }}
+        {{ hintText }}
       </p>
     </div>
   </a-modal>

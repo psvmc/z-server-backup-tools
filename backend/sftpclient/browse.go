@@ -5,10 +5,28 @@ import (
 	"path"
 	"strings"
 	"unicode"
+
+	"z-server-backup-tools/backend/model"
 )
 
-func toSFTPPath(windowsPath string) string {
-	p := strings.TrimSpace(windowsPath)
+// RemoteListEntry is one directory or file returned by ListEntries.
+type RemoteListEntry struct {
+	Name  string
+	IsDir bool
+}
+
+func toSFTPPath(remotePath string, osType string) string {
+	p := strings.TrimSpace(remotePath)
+	if model.IsLinuxOS(osType) {
+		p = strings.ReplaceAll(p, `\`, `/`)
+		if p == "" || p == "/" {
+			return "/"
+		}
+		if !strings.HasPrefix(p, "/") {
+			return "/" + strings.TrimPrefix(p, "/")
+		}
+		return p
+	}
 	p = strings.ReplaceAll(p, `\`, `/`)
 	if p == "" || p == "/" {
 		return "/"
@@ -22,8 +40,14 @@ func toSFTPPath(windowsPath string) string {
 	return p
 }
 
-func fromSFTPPath(sftpPath string) string {
+func fromSFTPPath(sftpPath string, osType string) string {
 	p := strings.TrimSpace(sftpPath)
+	if model.IsLinuxOS(osType) {
+		if p == "" || p == "/" {
+			return "/"
+		}
+		return p
+	}
 	if p == "" || p == "/" {
 		return ""
 	}
@@ -65,28 +89,98 @@ func isDriveName(name string) bool {
 	return false
 }
 
-func (c *Client) ListDirectories(windowsPath string) (current string, parent string, names []string, err error) {
-	hint := strings.TrimSpace(windowsPath)
-	if hint == "" || hint == "/" || hint == `\` {
-		return c.listDriveRoots()
+// ListEntries lists remote directories (and files) at pathHint.
+// Linux: empty or "/" lists filesystem root "/".
+// Windows: empty lists drive letters.
+func (c *Client) ListEntries(pathHint string, osType string) (current string, parent string, entries []RemoteListEntry, err error) {
+	osType = model.NormalizeOSType(osType)
+	hint := strings.TrimSpace(pathHint)
+
+	if model.IsLinuxOS(osType) {
+		if hint == "" {
+			hint = "/"
+		}
+		return c.listLinuxEntries(hint)
 	}
 
-	sftpPath := toSFTPPath(hint)
+	if hint == "" || hint == "/" || hint == `\` {
+		return c.listDriveRootEntries()
+	}
+	return c.listWindowsEntries(hint)
+}
+
+func (c *Client) listLinuxEntries(hint string) (current string, parent string, entries []RemoteListEntry, err error) {
+	sftpPath := toSFTPPath(hint, model.OSTypeLinux)
 	infos, err := c.sftp.ReadDir(sftpPath)
 	if err != nil {
 		return "", "", nil, fmt.Errorf("读取远程目录失败: %w", err)
 	}
-	current = fromSFTPPath(sftpPath)
+	current = fromSFTPPath(sftpPath, model.OSTypeLinux)
+	if current == "/" {
+		parent = ""
+	} else {
+		parent = path.Dir(current)
+		if parent == "." {
+			parent = "/"
+		}
+	}
+	out := make([]RemoteListEntry, 0, len(infos))
+	for _, fi := range infos {
+		name := fi.Name()
+		if name == "." || name == ".." {
+			continue
+		}
+		out = append(out, RemoteListEntry{Name: name, IsDir: fi.IsDir()})
+	}
+	return current, parent, out, nil
+}
+
+func (c *Client) listWindowsEntries(hint string) (current string, parent string, entries []RemoteListEntry, err error) {
+	sftpPath := toSFTPPath(hint, model.OSTypeWindows)
+	infos, err := c.sftp.ReadDir(sftpPath)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("读取远程目录失败: %w", err)
+	}
+	current = fromSFTPPath(sftpPath, model.OSTypeWindows)
 	parentSFTP := parentSFTPPath(sftpPath)
 	if parentSFTP == "/" {
 		parent = ""
 	} else {
-		parent = fromSFTPPath(parentSFTP)
+		parent = fromSFTPPath(parentSFTP, model.OSTypeWindows)
 	}
-	out := make([]string, 0, len(infos))
+	out := make([]RemoteListEntry, 0, len(infos))
 	for _, fi := range infos {
-		if fi.IsDir() && fi.Name() != "." && fi.Name() != ".." {
-			out = append(out, fi.Name())
+		name := fi.Name()
+		if name == "." || name == ".." {
+			continue
+		}
+		out = append(out, RemoteListEntry{Name: name, IsDir: fi.IsDir()})
+	}
+	return current, parent, out, nil
+}
+
+func (c *Client) listDriveRootEntries() (current string, parent string, entries []RemoteListEntry, err error) {
+	_, _, names, err := c.listDriveRoots()
+	if err != nil {
+		return "", "", nil, err
+	}
+	out := make([]RemoteListEntry, 0, len(names))
+	for _, name := range names {
+		out = append(out, RemoteListEntry{Name: name, IsDir: true})
+	}
+	return "", "", out, nil
+}
+
+// ListDirectories lists only directories (Windows-compatible helper).
+func (c *Client) ListDirectories(windowsPath string) (current string, parent string, names []string, err error) {
+	current, parent, entries, err := c.ListEntries(windowsPath, model.OSTypeWindows)
+	if err != nil {
+		return "", "", nil, err
+	}
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir {
+			out = append(out, e.Name)
 		}
 	}
 	return current, parent, out, nil
@@ -147,10 +241,10 @@ func (c *Client) listDriveRoots() (current string, parent string, names []string
 }
 
 func (c *Client) JoinRemoteDir(baseWindows, name string) string {
-	return JoinRemoteDirPublic(baseWindows, name)
+	return JoinRemotePath(baseWindows, name, model.OSTypeWindows)
 }
 
-func joinRemotePath(baseWindows, name string) string {
+func joinRemotePathWindows(baseWindows, name string) string {
 	base := strings.TrimSpace(baseWindows)
 	name = strings.Trim(name, `\/`)
 	if base == "" {
@@ -161,7 +255,27 @@ func joinRemotePath(baseWindows, name string) string {
 	return base + `\` + name
 }
 
+// JoinRemotePath joins a remote path segment using separators for osType.
+func JoinRemotePath(base, name, osType string) string {
+	if model.IsLinuxOS(osType) {
+		base = strings.TrimSpace(base)
+		name = strings.Trim(name, `/`)
+		if name == "" {
+			if base == "" {
+				return "/"
+			}
+			return base
+		}
+		if base == "" || base == "/" {
+			return "/" + name
+		}
+		base = strings.TrimSuffix(base, "/")
+		return base + "/" + name
+	}
+	return joinRemotePathWindows(base, name)
+}
+
 // JoinRemoteDirPublic joins using Windows-style separators for display.
 func JoinRemoteDirPublic(baseWindows, name string) string {
-	return joinRemotePath(baseWindows, name)
+	return JoinRemotePath(baseWindows, name, model.OSTypeWindows)
 }
