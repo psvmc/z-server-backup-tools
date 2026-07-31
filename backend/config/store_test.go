@@ -99,20 +99,49 @@ func TestStoreDeleteServerBlockedWhenReferenced(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := s.DeleteServer("s1"); err == nil {
-		t.Fatal("expected delete blocked")
+		t.Fatal("expected delete blocked by task reference")
 	}
 	s.BackupTasks = nil
 	s.SingleFile = model.SingleFileConfig{ServerID: "s1", RemoteFile: `D:\f`, LocalDir: `C:\b`}
 	_ = s.save()
-	if err := s.DeleteServer("s1"); err == nil {
-		t.Fatal("expected delete blocked by single file")
-	}
-	s.SingleFile = model.SingleFileConfig{}
-	_ = s.save()
 	if err := s.DeleteServer("s1"); err != nil {
-		t.Fatal(err)
+		t.Fatal("expected delete allowed when only legacy singleFileBackup references server")
 	}
 	if len(s.GetServers()) != 0 {
 		t.Fatal("expected empty")
+	}
+}
+
+func TestStoreActiveSingleFileTaskIDRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	s := &Store{filePath: path}
+	s.ActiveSingleFileTaskID = "sf1"
+	if err := s.save(); err != nil {
+		t.Fatal(err)
+	}
+	s2 := &Store{filePath: path}
+	if err := s2.load(); err != nil {
+		t.Fatal(err)
+	}
+	if s2.GetActiveSingleFileTaskID() != "sf1" {
+		t.Fatalf("got %q", s2.GetActiveSingleFileTaskID())
+	}
+}
+
+func TestStoreDeleteServerBlockedBySingleKindTask(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	s := &Store{filePath: path}
+	s.Servers = []model.Server{{ID: "s1", Name: "a", Host: "h", User: "u", Port: 22}}
+	s.BackupTasks = []model.BackupTask{{
+		ID: "t1", Kind: "single", ServerID: "s1",
+		RemoteSource: `/var/a.bak`, LocalDir: `C:\b`,
+	}}
+	if err := s.save(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteServer("s1"); err == nil {
+		t.Fatal("expected delete blocked by single task")
 	}
 }

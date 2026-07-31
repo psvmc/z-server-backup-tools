@@ -14,25 +14,27 @@ import (
 const appConfigDir = "z-server-backup-tools"
 
 type diskConfig struct {
-	SkippedUpdateVersion string                    `json:"skippedUpdateVersion,omitempty"`
-	Backup               model.BackupConfig        `json:"backup"`
-	Servers              []model.Server            `json:"servers,omitempty"`
-	BackupTasks          []model.BackupTask        `json:"backupTasks,omitempty"`
-	ActiveTaskID         string                    `json:"activeTaskId,omitempty"`
-	BackupTiming         model.BackupTimingSession `json:"backupTiming,omitempty"`
-	SingleFile           model.SingleFileConfig    `json:"singleFileBackup,omitempty"`
+	SkippedUpdateVersion   string                    `json:"skippedUpdateVersion,omitempty"`
+	Backup                 model.BackupConfig        `json:"backup"`
+	Servers                []model.Server            `json:"servers,omitempty"`
+	BackupTasks            []model.BackupTask        `json:"backupTasks,omitempty"`
+	ActiveTaskID           string                    `json:"activeTaskId,omitempty"`
+	ActiveSingleFileTaskID string                    `json:"activeSingleFileTaskId,omitempty"`
+	BackupTiming           model.BackupTimingSession `json:"backupTiming,omitempty"`
+	SingleFile             model.SingleFileConfig    `json:"singleFileBackup,omitempty"`
 }
 
 type Store struct {
-	mu                   sync.Mutex
-	filePath             string
-	SkippedUpdateVersion string
-	Backup               model.BackupConfig
-	Servers              []model.Server
-	BackupTasks          []model.BackupTask
-	ActiveTaskID         string
-	BackupTiming         model.BackupTimingSession
-	SingleFile           model.SingleFileConfig
+	mu                     sync.Mutex
+	filePath               string
+	SkippedUpdateVersion   string
+	Backup                 model.BackupConfig
+	Servers                []model.Server
+	BackupTasks            []model.BackupTask
+	ActiveTaskID           string
+	ActiveSingleFileTaskID string
+	BackupTiming           model.BackupTimingSession
+	SingleFile             model.SingleFileConfig
 }
 
 var (
@@ -85,6 +87,7 @@ func (s *Store) load() error {
 	s.Servers = payload.Servers
 	s.BackupTasks = payload.BackupTasks
 	s.ActiveTaskID = payload.ActiveTaskID
+	s.ActiveSingleFileTaskID = payload.ActiveSingleFileTaskID
 	s.BackupTiming = payload.BackupTiming
 	s.SingleFile = payload.SingleFile
 	if s.migrateLegacyTask() {
@@ -123,13 +126,14 @@ func (s *Store) migrateLegacyTask() bool {
 
 func (s *Store) save() error {
 	payload := diskConfig{
-		SkippedUpdateVersion: s.SkippedUpdateVersion,
-		Backup:               s.Backup,
-		Servers:              s.Servers,
-		BackupTasks:          s.BackupTasks,
-		ActiveTaskID:         s.ActiveTaskID,
-		BackupTiming:         s.BackupTiming,
-		SingleFile:           s.SingleFile,
+		SkippedUpdateVersion:   s.SkippedUpdateVersion,
+		Backup:                 s.Backup,
+		Servers:                s.Servers,
+		BackupTasks:            s.BackupTasks,
+		ActiveTaskID:           s.ActiveTaskID,
+		ActiveSingleFileTaskID: s.ActiveSingleFileTaskID,
+		BackupTiming:           s.BackupTiming,
+		SingleFile:             s.SingleFile,
 	}
 	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
@@ -238,6 +242,22 @@ func (s *Store) SetActiveTaskID(id string) error {
 	return s.save()
 }
 
+func (s *Store) GetActiveSingleFileTaskID() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return strings.TrimSpace(s.ActiveSingleFileTaskID)
+}
+
+func (s *Store) SetActiveSingleFileTaskID(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.load(); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	s.ActiveSingleFileTaskID = strings.TrimSpace(id)
+	return s.save()
+}
+
 func (s *Store) GetSingleFileConfig() model.SingleFileConfig {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -282,9 +302,6 @@ func (s *Store) DeleteServer(id string) error {
 		if task.ServerID == id {
 			return fmt.Errorf("服务器仍被引用，无法删除")
 		}
-	}
-	if s.SingleFile.ServerID == id {
-		return fmt.Errorf("服务器仍被引用，无法删除")
 	}
 	out := make([]model.Server, 0, len(s.Servers))
 	for _, srv := range s.Servers {
