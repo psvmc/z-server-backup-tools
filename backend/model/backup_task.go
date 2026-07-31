@@ -6,6 +6,7 @@ import "strings"
 type BackupTask struct {
 	ID             string `json:"id"`
 	Name           string `json:"name,omitempty"`
+	ServerID       string `json:"server_id,omitempty"`
 	RemoteSource   string `json:"remote_source"`
 	LocalDir       string `json:"local_dir"`
 	PartNamePrefix string `json:"part_name_prefix,omitempty"`

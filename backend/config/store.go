@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,7 @@ const appConfigDir = "z-server-backup-tools"
 type diskConfig struct {
 	SkippedUpdateVersion string                    `json:"skippedUpdateVersion,omitempty"`
 	Backup               model.BackupConfig        `json:"backup"`
+	Servers              []model.Server            `json:"servers,omitempty"`
 	BackupTasks          []model.BackupTask        `json:"backupTasks,omitempty"`
 	ActiveTaskID         string                    `json:"activeTaskId,omitempty"`
 	BackupTiming         model.BackupTimingSession `json:"backupTiming,omitempty"`
@@ -26,6 +28,7 @@ type Store struct {
 	filePath             string
 	SkippedUpdateVersion string
 	Backup               model.BackupConfig
+	Servers              []model.Server
 	BackupTasks          []model.BackupTask
 	ActiveTaskID         string
 	BackupTiming         model.BackupTimingSession
@@ -79,6 +82,7 @@ func (s *Store) load() error {
 	}
 	s.SkippedUpdateVersion = payload.SkippedUpdateVersion
 	s.Backup = payload.Backup
+	s.Servers = payload.Servers
 	s.BackupTasks = payload.BackupTasks
 	s.ActiveTaskID = payload.ActiveTaskID
 	s.BackupTiming = payload.BackupTiming
@@ -121,6 +125,7 @@ func (s *Store) save() error {
 	payload := diskConfig{
 		SkippedUpdateVersion: s.SkippedUpdateVersion,
 		Backup:               s.Backup,
+		Servers:              s.Servers,
 		BackupTasks:          s.BackupTasks,
 		ActiveTaskID:         s.ActiveTaskID,
 		BackupTiming:         s.BackupTiming,
@@ -246,5 +251,47 @@ func (s *Store) SetSingleFileConfig(cfg model.SingleFileConfig) error {
 		return err
 	}
 	s.SingleFile = cfg
+	return s.save()
+}
+
+func (s *Store) GetServers() []model.Server {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]model.Server, len(s.Servers))
+	copy(out, s.Servers)
+	return out
+}
+
+func (s *Store) SetServers(servers []model.Server) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.load(); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	s.Servers = servers
+	return s.save()
+}
+
+func (s *Store) DeleteServer(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.load(); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	for _, task := range s.BackupTasks {
+		if task.ServerID == id {
+			return fmt.Errorf("服务器仍被引用，无法删除")
+		}
+	}
+	if s.SingleFile.ServerID == id {
+		return fmt.Errorf("服务器仍被引用，无法删除")
+	}
+	out := make([]model.Server, 0, len(s.Servers))
+	for _, srv := range s.Servers {
+		if srv.ID != id {
+			out = append(out, srv)
+		}
+	}
+	s.Servers = out
 	return s.save()
 }
