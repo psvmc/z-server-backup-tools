@@ -20,15 +20,29 @@ export interface BackupConfig {
   known_hosts_file?: string;
 }
 
+export interface Server {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  support_multi_file: boolean;
+  remote_app_dir?: string;
+  max_part_gb?: number;
+}
+
 export interface BackupTask {
   id: string;
   name?: string;
+  server_id?: string;
   remote_source: string;
   local_dir: string;
   part_name_prefix?: string;
 }
 
 export interface SingleFileConfig {
+  server_id?: string;
   remote_file: string;
   local_dir: string;
 }
@@ -70,6 +84,19 @@ export interface LocalPartListing {
   files: LocalPartFile[];
 }
 
+export function emptyNotifyConfig(): BackupConfig {
+  return {
+    host: "",
+    port: 22,
+    user: "",
+    password: "",
+    remote_app_dir: "",
+    remote_source: "",
+    local_dir: "",
+    max_part_gb: 0,
+  };
+}
+
 export function remotePathsFromAppDir(appDir: string) {
   const base = appDir.trim().replace(/\//g, "\\").replace(/\\+$/, "");
   if (!base) {
@@ -79,6 +106,21 @@ export function remotePathsFromAppDir(appDir: string) {
     srv: `${base}\\zipbak-srv.exe`,
     state: `${base}\\data\\state-{任务ID}.db`,
     staging: `${base}\\staging-{任务ID}`,
+  };
+}
+
+export function applyServer(base: BackupConfig, server?: Server | null): BackupConfig {
+  if (!server) {
+    return { ...base, host: "", user: "", password: "", remote_app_dir: "", max_part_gb: 0 };
+  }
+  return {
+    ...base,
+    host: server.host,
+    port: server.port || 22,
+    user: server.user,
+    password: server.password,
+    remote_app_dir: server.remote_app_dir ?? "",
+    max_part_gb: server.max_part_gb || 2,
   };
 }
 
@@ -93,6 +135,14 @@ export function mergeTaskConfig(base: BackupConfig, task?: BackupTask | null): B
     local_dir: task.local_dir ?? "",
     part_name_prefix: task.part_name_prefix ?? "",
   };
+}
+
+export function mergeJobConfig(
+  notify: BackupConfig,
+  server: Server | null | undefined,
+  task?: BackupTask | null,
+): BackupConfig {
+  return mergeTaskConfig(applyServer(notify, server), task);
 }
 
 export function taskDisplayName(task: BackupTask): string {

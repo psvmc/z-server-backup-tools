@@ -15,6 +15,7 @@ import { useBackupTiming } from "./composables/useBackupTiming";
 import { useSingleFileBackup } from "./composables/useSingleFileBackup";
 import { useAppMainTabs, useJobExclusion } from "./AppTabs";
 import { downloadPhaseLabel } from "./utils/backupUi";
+import { mergeJobConfig } from "./types/backup";
 
 import type { BackupConfig, BackupTask } from "./types/backup";
 
@@ -28,7 +29,8 @@ const {
   config,
   tasks,
   activeTaskId,
-  jobConfig,
+  activeTask,
+  findServer,
   configPath,
   status,
   logs,
@@ -37,15 +39,17 @@ const {
   loadTasks,
   selectTask,
   removeTask,
-  saveConnectionConfig,
-  savePathsConfig,
-  testConnection,
+  saveNotify,
   initRemote,
   resetBackupTask,
   startBackup,
   stopBackup,
   refreshStatus,
 } = useBackupJob();
+
+const jobConfig = computed(() =>
+  mergeJobConfig(config.value, findServer(activeTask.value?.server_id), activeTask.value),
+);
 
 const { mainTab, singlePanelActive } = useAppMainTabs();
 const single = useSingleFileBackup({ panelActive: singlePanelActive });
@@ -94,12 +98,8 @@ const appTheme = {
   algorithm: theme.defaultAlgorithm,
 };
 
-async function onSaveConnection(cfg: BackupConfig) {
-  await saveConnectionConfig(cfg);
-}
-
-async function onSavePaths(cfg: BackupConfig) {
-  if (await savePathsConfig(cfg)) {
+async function onSaveNotify(cfg: BackupConfig) {
+  if (await saveNotify(cfg)) {
     settingsOpen.value = false;
   }
 }
@@ -133,7 +133,7 @@ async function onTaskSaved() {
       <div class="app-body">
         <a-tabs v-model:activeKey="mainTab" class="app-main-tabs">
           <template #rightExtra>
-            <a-button type="default" size="small" @click="settingsOpen = true">设置</a-button>
+            <a-button type="default" size="small" @click="settingsOpen = true">通知设置</a-button>
           </template>
           <a-tab-pane key="multi" tab="多文件备份" :disabled="singleRunning">
             <BackupRunPanel
@@ -152,7 +152,6 @@ async function onTaskSaved() {
               @refresh="refreshStatus"
               @init="initRemote"
               @reset="resetBackupTask"
-              @open-settings="settingsOpen = true"
               @add-task="openAddTask"
               @edit-task="openEditTask"
               @select-task="selectTask"
@@ -174,9 +173,7 @@ async function onTaskSaved() {
         v-model:config="config"
         :config-path="configPath"
         :saving="settingsSaving"
-        @save-connection="onSaveConnection"
-        @save-paths="onSavePaths"
-        @test="testConnection"
+        @save-notify="onSaveNotify"
       />
 
       <BackupTaskFormModal

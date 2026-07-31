@@ -1,9 +1,7 @@
 <script setup lang="ts">
-import { message } from "ant-design-vue";
-import { BackupService } from "../../bindings/z-server-backup-tools/backend/service";
 import type { BackupConfig } from "../types/backup";
-import { formatError } from "../types/update";
 import BackupConfigPanel from "./BackupConfigPanel.vue";
+import { useBackupSettingsDialog } from "./BackupSettingsDialog";
 
 const open = defineModel<boolean>("open", { required: true });
 const config = defineModel<BackupConfig>("config", { required: true });
@@ -14,32 +12,17 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  saveConnection: [cfg: BackupConfig];
-  savePaths: [cfg: BackupConfig];
-  test: [];
+  saveNotify: [cfg: BackupConfig];
 }>();
 
-function onSavePaths() {
-  if (props.saving) return;
-  emit("savePaths", { ...config.value });
-}
-
-async function openConfigFolder() {
-  const path = props.configPath?.trim();
-  if (!path) return;
-  try {
-    await BackupService.OpenInExplorer(path);
-  } catch (err) {
-    message.error(formatError(err));
-  }
-}
+const { onSaveNotify, openConfigFolder } = useBackupSettingsDialog(config, props, emit);
 </script>
 
 <template>
   <a-modal
     v-model:open="open"
-    title="设置"
-    :width="920"
+    title="通知设置"
+    :width="720"
     wrap-class-name="backup-settings-modal"
     :mask-closable="false"
     :closable="!props.saving"
@@ -48,12 +31,7 @@ async function openConfigFolder() {
     :body-style="{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto', overflowX: 'hidden' }"
   >
     <a-spin :spinning="!!props.saving" tip="保存中…" class="settings-save-spin">
-      <BackupConfigPanel
-        v-model:config="config"
-        :saving="props.saving"
-        @save-connection="emit('saveConnection', $event)"
-        @test="emit('test')"
-      />
+      <BackupConfigPanel v-model:config="config" :saving="props.saving" />
     </a-spin>
 
     <template #footer>
@@ -66,7 +44,7 @@ async function openConfigFolder() {
           配置文件：{{ props.configPath }}
         </div>
         <a-button v-if="props.configPath" @click="openConfigFolder">打开所在文件夹</a-button>
-        <a-button type="primary" :loading="props.saving" :disabled="props.saving" @click="onSavePaths">
+        <a-button type="primary" :loading="props.saving" :disabled="props.saving" @click="onSaveNotify">
           保存配置
         </a-button>
       </div>

@@ -2,32 +2,33 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { message } from "ant-design-vue";
 import { Events } from "@wailsio/runtime";
 import { BackupService } from "../../bindings/z-server-backup-tools/backend/service";
-import { BackupConfig as BackupConfigBinding } from "../../bindings/z-server-backup-tools/backend/model/models";
-import type { BackupConfig, BackupTask, JobStatus } from "../types/backup";
-import { mergeTaskConfig } from "../types/backup";
+import {
+  BackupConfig as BackupConfigBinding,
+  Server as ServerBinding,
+} from "../../bindings/z-server-backup-tools/backend/model/models";
+import type { BackupConfig, BackupTask, JobStatus, Server } from "../types/backup";
+import { emptyNotifyConfig, mergeJobConfig } from "../types/backup";
 import { formatError } from "../types/update";
-
-const defaultConfig = (): BackupConfig => ({
-  host: "",
-  port: 22,
-  user: "",
-  password: "",
-  remote_app_dir: "D:/Tools/zipbak",
-  remote_source: "",
-  local_dir: "",
-  max_part_gb: 2,
-});
 
 function toBindingConfig(cfg: BackupConfig) {
   return BackupConfigBinding.createFrom(JSON.parse(JSON.stringify(cfg)));
+}
+
+function toBindingServer(srv: Server) {
+  return ServerBinding.createFrom(JSON.parse(JSON.stringify(srv)));
 }
 
 function bindingToPlain(cfg: BackupConfigBinding): BackupConfig {
   return JSON.parse(JSON.stringify(cfg)) as BackupConfig;
 }
 
+function bindingToPlainServer(srv: ServerBinding): Server {
+  return JSON.parse(JSON.stringify(srv)) as Server;
+}
+
 export function useBackupJob() {
-  const config = ref<BackupConfig>(defaultConfig());
+  const config = ref<BackupConfig>(emptyNotifyConfig());
+  const servers = ref<Server[]>([]);
   const tasks = ref<BackupTask[]>([]);
   const activeTaskId = ref("");
   const status = ref<JobStatus>({
@@ -51,7 +52,15 @@ export function useBackupJob() {
   const remoteInitLoading = ref(false);
 
   const activeTask = computed(() => tasks.value.find((t) => t.id === activeTaskId.value) ?? null);
-  const jobConfig = computed(() => mergeTaskConfig(config.value, activeTask.value));
+
+  const findServer = (id?: string | null) => {
+    if (!id?.trim()) return null;
+    return servers.value.find((s) => s.id === id) ?? null;
+  };
+
+  const jobConfig = computed(() =>
+    mergeJobConfig(config.value, findServer(activeTask.value?.server_id), activeTask.value),
+  );
 
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let remotePollTimer: ReturnType<typeof setInterval> | null = null;
@@ -85,6 +94,11 @@ export function useBackupJob() {
     await refreshLocal();
   };
 
+  const loadServers = async () => {
+    const list = await BackupService.GetServers();
+    servers.value = (list ?? []).map((s) => bindingToPlainServer(s));
+  };
+
   const loadTasks = async () => {
     tasks.value = (await BackupService.GetTasks()) as BackupTask[];
     activeTaskId.value = await BackupService.GetActiveTaskID();
@@ -96,9 +110,34 @@ export function useBackupJob() {
 
   const loadConfig = async () => {
     const stored = BackupConfigBinding.createFrom(await BackupService.GetConfig());
-    config.value = { ...defaultConfig(), ...bindingToPlain(stored) };
+    config.value = { ...emptyNotifyConfig(), ...bindingToPlain(stored) };
     configPath.value = await BackupService.GetConfigPath();
+    await loadServers();
     await loadTasks();
+  };
+
+  const saveServer = async (srv: Server): Promise<Server | null> => {
+    try {
+      const saved = await BackupService.SaveServer(toBindingServer(srv));
+      await loadServers();
+      message.success("服务器已保存");
+      return bindingToPlainServer(saved);
+    } catch (err) {
+      message.error(formatError(err));
+      return null;
+    }
+  };
+
+  const deleteServer = async (id: string): Promise<boolean> => {
+    try {
+      await BackupService.DeleteServer(id);
+      await loadServers();
+      message.success("服务器已删除");
+      return true;
+    } catch (err) {
+      message.error(formatError(err));
+      return false;
+    }
   };
 
   const selectTask = async (taskId: string) => {
@@ -134,32 +173,13 @@ export function useBackupJob() {
     }
   };
 
-  const saveConnectionConfig = async (payload?: BackupConfig): Promise<boolean> => {
-    const toSave = { ...defaultConfig(), ...(payload ?? config.value) };
+  const saveNotify = async (payload?: BackupConfig): Promise<boolean> => {
+    const toSave = { ...emptyNotifyConfig(), ...(payload ?? config.value) };
     settingsSaving.value = true;
     try {
-      await BackupService.SaveConnectionConfig(toBindingConfig(toSave));
-      config.value = { ...config.value, host: toSave.host, user: toSave.user, password: toSave.password, port: toSave.port };
-      configPath.value = await BackupService.GetConfigPath();
-      message.success("服务器连接已保存");
-      return true;
-    } catch (err) {
-      message.error(formatError(err));
-      return false;
-    } finally {
-      settingsSaving.value = false;
-    }
-  };
-
-  const savePathsConfig = async (payload?: BackupConfig): Promise<boolean> => {
-    const toSave = { ...defaultConfig(), ...(payload ?? config.value) };
-    settingsSaving.value = true;
-    try {
-      await BackupService.SavePathsConfig(toBindingConfig(toSave));
+      await BackupService.SaveNotifyConfig(toBindingConfig(toSave));
       config.value = {
         ...config.value,
-        remote_app_dir: toSave.remote_app_dir,
-        max_part_gb: toSave.max_part_gb,
         notify_email: toSave.notify_email,
         smtp_host: toSave.smtp_host,
         smtp_port: toSave.smtp_port,
@@ -167,25 +187,13 @@ export function useBackupJob() {
         smtp_password: toSave.smtp_password,
       };
       configPath.value = await BackupService.GetConfigPath();
-      message.success("应用配置已保存");
+      message.success("通知设置已保存");
       return true;
     } catch (err) {
       message.error(formatError(err));
       return false;
     } finally {
       settingsSaving.value = false;
-    }
-  };
-
-  const testConnection = async () => {
-    const hide = message.loading("测试 SSH 连接...", 0);
-    try {
-      await BackupService.TestConnection(toBindingConfig(config.value));
-      hide();
-      message.success("连接成功");
-    } catch (err) {
-      hide();
-      message.error(formatError(err));
     }
   };
 
@@ -279,21 +287,24 @@ export function useBackupJob() {
 
   return {
     config,
+    servers,
     tasks,
     activeTaskId,
     activeTask,
     jobConfig,
+    findServer,
     configPath,
     status,
     logs,
     settingsSaving,
     remoteInitLoading,
+    loadServers,
     loadTasks,
     selectTask,
     removeTask,
-    saveConnectionConfig,
-    savePathsConfig,
-    testConnection,
+    saveNotify,
+    saveServer,
+    deleteServer,
     initRemote,
     resetBackupTask,
     startBackup,

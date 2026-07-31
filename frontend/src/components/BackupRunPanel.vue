@@ -24,7 +24,6 @@ defineEmits<{
   refresh: [];
   init: [];
   reset: [];
-  openSettings: [];
   addTask: [];
   editTask: [task: BackupTask];
   selectTask: [id: string];
@@ -119,7 +118,6 @@ watch(autoScrollLog, (on) => {
         <div class="panel-card-header panel-card-header--with-actions">
           <span>备份任务</span>
           <div class="panel-card-header-actions">
-            <a-button type="default" size="small" @click="$emit('openSettings')">设置</a-button>
             <a-button
               type="default"
               size="small"
