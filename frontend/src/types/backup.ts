@@ -28,6 +28,11 @@ export interface BackupTask {
   part_name_prefix?: string;
 }
 
+export interface SingleFileConfig {
+  remote_file: string;
+  local_dir: string;
+}
+
 export interface JobStatus {
   running: boolean;
   phase: string;
