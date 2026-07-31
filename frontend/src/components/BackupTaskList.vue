@@ -17,8 +17,8 @@ const emit = defineEmits<{
 }>();
 
 const columns = [
-  { title: "任务", dataIndex: "name", key: "name", ellipsis: true },
-  { title: "远程源目录", dataIndex: "remote_source", key: "remote_source", ellipsis: true },
+  { title: "任务", dataIndex: "name", key: "name", width: 100, ellipsis: true },
+  { title: "远程源目录", dataIndex: "remote_source", key: "remote_source", width: 280, ellipsis: true },
   { title: "本机目录", dataIndex: "local_dir", key: "local_dir", ellipsis: true },
   { title: "前缀", dataIndex: "part_name_prefix", key: "part_name_prefix", width: 100, ellipsis: true },
   { title: "操作", key: "actions", width: 160 },

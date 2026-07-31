@@ -222,3 +222,47 @@ body {
   padding-top: 12px;
   padding-bottom: 16px;
 }
+
+.remote-dir-picker-modal .ant-modal {
+  max-width: calc(100vw - 32px);
+}
+
+.remote-dir-picker-modal .ant-modal-content {
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.remote-dir-picker-modal .ant-modal-header {
+  flex-shrink: 0;
+}
+
+.remote-dir-picker-modal .ant-modal-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.local-parts-modal .ant-modal {
+  max-width: calc(100vw - 32px);
+}
+
+.local-parts-modal .ant-modal-content {
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.local-parts-modal .ant-modal-header {
+  flex-shrink: 0;
+}
+
+.local-parts-modal .ant-modal-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}

@@ -2,7 +2,7 @@ package main
 
 const (
 	AppName    = "ZServerBackup"
-	AppVersion = "1.0.2"
+	AppVersion = "1.0.3"
 )
 
 func AppTitle() string {

@@ -10,6 +10,12 @@ export default defineConfig({
     host: "127.0.0.1",
     port,
     strictPort: true,
+    hmr: {
+      host: "127.0.0.1",
+      protocol: "ws",
+      port,
+      clientPort: port,
+    },
   },
   optimizeDeps: {
     include: ["vue", "ant-design-vue", "dayjs", "@wailsio/runtime"],

@@ -313,7 +313,6 @@ func (s *BackupService) InitRemote(cfg model.BackupConfig) error {
 	if st.PendingZip != "" {
 		s.appendLog("待处理分卷: " + st.PendingZip)
 	}
-	appendOversizedWarnings(s.appendLog, prepared)
 	return nil
 }
 

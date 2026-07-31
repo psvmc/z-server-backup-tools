@@ -166,6 +166,8 @@ async function onSubmit() {
       <a-form-item label="远程源目录 (--dir)">
         <PathPickInput
           v-model="form.remote_source"
+          editable
+          placeholder="可手动输入，如 D:\data"
           @browse="
             () => {
               if (!ensureConnectionFilled()) return;

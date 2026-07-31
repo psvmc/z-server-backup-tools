@@ -113,7 +113,12 @@ async function testEmail() {
       <a-form layout="vertical" size="small" class="w-full">
         <div class="config-form-grid">
           <a-form-item label="远程应用目录" class="config-form-span-2">
-            <PathPickInput v-model="config.remote_app_dir" @browse="openRemotePicker" />
+            <PathPickInput
+              v-model="config.remote_app_dir"
+              editable
+              placeholder="可手动输入，如 D:\Tools\zipbak"
+              @browse="openRemotePicker"
+            />
           </a-form-item>
           <a-form-item label="分卷上限 (GB)" class="config-form-span-2">
             <a-input-number

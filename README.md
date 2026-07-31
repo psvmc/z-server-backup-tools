@@ -25,14 +25,17 @@
 scripts\run-dev.bat
 ```
 
-`wails3 dev` 会监听 **Go** 与 **`frontend/src`**（`.vue` / `.ts` / `.css`）。保存后约 1～2 秒会自动 `build DEV` 并**重启窗口**（使用内置 `frontend/dist`，避免 WebView 代理 Vite 白屏）。
+`wails3 dev` 会：
+
+- 启动 **Vite** 开发服务器：改 `frontend/src`（`.vue` / `.ts` / `.css`）时 **窗口不关**，内部 HMR 热更新
+- 仅监听 **`*.go`**：后端改动后自动 rebuild 并重启窗口
 
 | 脚本 | 作用 |
 |------|------|
-| `scripts\run-dev.bat` | 开发：改代码后自动 rebuild + 重启 |
-| `scripts\dev-run-app.bat` | 只运行当前 `dist\ZServerBackup.exe`，无监听 |
+| `scripts\run-dev.bat` | 开发：前端 HMR + Go 改动才重启 |
+| `scripts\dev-run-app.bat` | 由 `wails3 dev` 拉起当前 `dist\ZServerBackup.exe` |
 
-在浏览器里调试 UI（可选）：`cd frontend` → `set WAILS_VITE_PORT=10245` → `npm run dev` → http://localhost:10245/
+在浏览器里调试 UI（可选，无 Go 绑定）：`cd frontend` → `set WAILS_VITE_PORT=10245` → `npm run dev` → http://localhost:10245/
 
 Linux/macOS：
 
