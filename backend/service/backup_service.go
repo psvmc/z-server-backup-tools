@@ -421,6 +421,13 @@ func (s *BackupService) StartBackup(cfg model.BackupConfig) error {
 		s.mu.Unlock()
 		return fmt.Errorf("备份已在运行")
 	}
+	s.mu.Unlock()
+
+	if err := defaultJobGate.TryAcquireMulti(); err != nil {
+		return err
+	}
+
+	s.mu.Lock()
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
 	s.status = model.JobStatus{Running: true, Phase: "starting"}
@@ -443,6 +450,7 @@ func (s *BackupService) StopBackup() {
 
 func (s *BackupService) runPipeline(ctx context.Context, cfg model.BackupConfig) {
 	defer func() {
+		defaultJobGate.ReleaseMulti()
 		s.mu.Lock()
 		s.status.Running = false
 		s.cancel = nil
