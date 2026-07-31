@@ -12,6 +12,7 @@ type BackupConfig struct {
 	Port           int     `json:"port"`
 	User           string  `json:"user"`
 	Password       string  `json:"password"`
+	OSType         string  `json:"os_type,omitempty"`
 	RemoteAppDir   string  `json:"remote_app_dir"`
 	RemoteSrv      string  `json:"remote_srv,omitempty"`
 	RemoteState    string  `json:"remote_state,omitempty"`
@@ -43,11 +44,16 @@ func (c BackupConfig) Resolved() BackupConfig {
 	if app == "" {
 		return out
 	}
-	base := util.NormalizeRemotePath(app)
-	out.RemoteSrv = util.JoinRemote(base, "zipbak-srv.exe")
+	osType := NormalizeOSType(c.OSType)
+	base := util.NormalizeRemotePathForOS(app, osType)
+	exe := "zipbak-srv.exe"
+	if IsLinuxOS(osType) {
+		exe = "zipbak-srv"
+	}
+	out.RemoteSrv = util.JoinRemoteForOS(osType, base, exe)
 	suffix := taskPathSuffix(c.TaskID)
-	out.RemoteState = util.JoinRemote(base, "data", "state"+suffix+".db")
-	out.RemoteStaging = util.JoinRemote(base, "staging"+suffix)
+	out.RemoteState = util.JoinRemoteForOS(osType, base, "data", "state"+suffix+".db")
+	out.RemoteStaging = util.JoinRemoteForOS(osType, base, "staging"+suffix)
 	return out
 }
 
