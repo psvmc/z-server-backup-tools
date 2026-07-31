@@ -60,8 +60,15 @@ func (s *SingleFileBackupService) SaveConfig(cfg model.SingleFileConfig) error {
 	if s.store == nil {
 		return fmt.Errorf("配置存储不可用")
 	}
+	cfg.ServerID = strings.TrimSpace(cfg.ServerID)
 	cfg.RemoteFile = strings.TrimSpace(cfg.RemoteFile)
 	cfg.LocalDir = strings.TrimSpace(cfg.LocalDir)
+	if cfg.ServerID == "" {
+		return fmt.Errorf("请选择服务器")
+	}
+	if _, err := lookupServer(s.store, cfg.ServerID); err != nil {
+		return err
+	}
 	if cfg.RemoteFile == "" {
 		return fmt.Errorf("远程文件路径不能为空")
 	}
@@ -86,7 +93,17 @@ func (s *SingleFileBackupService) GetLogs() []string {
 }
 
 func (s *SingleFileBackupService) StartDownload(sshCfg model.BackupConfig, paths model.SingleFileConfig) error {
-	prepared, err := prepareSSH(sshCfg)
+	_ = sshCfg // 入参 SSH 仅作前端兜底；实际以 store 中 Server + 邮件为准
+	srv, err := lookupServer(s.store, paths.ServerID)
+	if err != nil {
+		return err
+	}
+	notify := model.BackupConfig{}
+	if s.store != nil {
+		notify = s.store.GetBackupConfig()
+	}
+	cfg := srv.ApplyTo(notify)
+	prepared, err := prepareSSH(cfg)
 	if err != nil {
 		return err
 	}

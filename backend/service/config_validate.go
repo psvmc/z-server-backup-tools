@@ -1,9 +1,12 @@
 package service
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"strings"
 
+	"z-server-backup-tools/backend/config"
 	"z-server-backup-tools/backend/model"
 )
 
@@ -53,4 +56,67 @@ func prepareBackupJob(cfg model.BackupConfig) (model.BackupConfig, error) {
 	cfg.RemoteState = ""
 	cfg.RemoteStaging = ""
 	return cfg.Resolved(), nil
+}
+
+func mergeServerTaskNotify(notify model.BackupConfig, srv model.Server, task model.BackupTask) model.BackupConfig {
+	return task.MergeInto(srv.ApplyTo(notify)).Resolved()
+}
+
+func lookupServer(store *config.Store, id string) (model.Server, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return model.Server{}, fmt.Errorf("请选择服务器")
+	}
+	if store == nil {
+		return model.Server{}, fmt.Errorf("配置存储不可用")
+	}
+	for _, srv := range store.GetServers() {
+		if srv.ID == id {
+			return srv, nil
+		}
+	}
+	return model.Server{}, fmt.Errorf("服务器不存在: %s", id)
+}
+
+func normalizeServer(srv model.Server) (model.Server, error) {
+	srv.ID = strings.TrimSpace(srv.ID)
+	srv.Name = strings.TrimSpace(srv.Name)
+	srv.Host = strings.TrimSpace(srv.Host)
+	srv.User = strings.TrimSpace(srv.User)
+	srv.RemoteAppDir = strings.TrimSpace(srv.RemoteAppDir)
+	if srv.Name == "" {
+		return model.Server{}, fmt.Errorf("服务器名称不能为空")
+	}
+	if srv.Host == "" {
+		return model.Server{}, fmt.Errorf("SSH 主机不能为空")
+	}
+	if srv.User == "" {
+		return model.Server{}, fmt.Errorf("SSH 用户名不能为空")
+	}
+	if srv.Port == 0 {
+		srv.Port = 22
+	}
+	if srv.SupportMultiFile {
+		if srv.RemoteAppDir == "" {
+			return model.Server{}, fmt.Errorf("远程应用目录不能为空")
+		}
+		if srv.MaxPartGB <= 0 {
+			return model.Server{}, fmt.Errorf("分卷上限必须大于 0")
+		}
+	} else {
+		srv.RemoteAppDir = ""
+		srv.MaxPartGB = 0
+	}
+	if srv.ID == "" {
+		srv.ID = newEntityID()
+	}
+	return srv, nil
+}
+
+func newEntityID() string {
+	var b [6]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("%d", len(b))
+	}
+	return hex.EncodeToString(b[:])
 }

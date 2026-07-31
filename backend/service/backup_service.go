@@ -109,46 +109,96 @@ func (s *BackupService) SaveConnectionConfig(cfg model.BackupConfig) error {
 }
 
 func (s *BackupService) SavePathsConfig(cfg model.BackupConfig) error {
+	// 兼容旧前端：路径/SSH 已迁至服务器；此处仅保存邮件通知。
+	return s.SaveNotifyConfig(cfg)
+}
+
+func (s *BackupService) SaveNotifyConfig(cfg model.BackupConfig) error {
 	if s.store == nil {
 		return fmt.Errorf("配置存储不可用")
 	}
-	prev := s.storedConfig()
-	oldMaxPartGB := prev.MaxPartGB
-	stored := prev
-	stored.RemoteAppDir = strings.TrimSpace(cfg.RemoteAppDir)
+	stored := s.storedConfig()
 	stored.NotifyEmail = strings.TrimSpace(cfg.NotifyEmail)
 	stored.SmtpHost = strings.TrimSpace(cfg.SmtpHost)
 	stored.SmtpPort = cfg.SmtpPort
 	stored.SmtpUser = strings.TrimSpace(cfg.SmtpUser)
 	stored.SmtpPassword = cfg.SmtpPassword
-	if cfg.MaxPartGB > 0 {
-		stored.MaxPartGB = cfg.MaxPartGB
-	}
-	if stored.MaxPartGB <= 0 {
-		stored.MaxPartGB = 2
-	}
-	if stored.RemoteAppDir == "" {
-		return fmt.Errorf("远程应用目录不能为空")
-	}
+	// 剥离全局 SSH/远程应用，避免 UI 误用残留连接字段
+	stored.Host, stored.User, stored.Password, stored.RemoteAppDir = "", "", "", ""
+	stored.Port = 22
+	stored.MaxPartGB = 0
 	stored.RemoteSrv = ""
 	stored.RemoteState = ""
 	stored.RemoteStaging = ""
-	resolved := stored.Resolved()
-	if err := s.store.SetBackupConfig(resolved); err != nil {
-		return err
+	return s.store.SetBackupConfig(stored)
+}
+
+func (s *BackupService) GetServers() []model.Server {
+	if s.store == nil {
+		return nil
 	}
-	if maxPartGBChanged(stored.MaxPartGB, oldMaxPartGB) {
-		active := s.activeTaskMerged()
-		if active.RemoteSource != "" && active.LocalDir != "" {
-			st, err := s.queryRemoteStatusLocked(active)
-			if err == nil {
-				s.mu.Lock()
-				s.applyRemoteStatus(st, false)
-				s.mu.Unlock()
-			}
+	return s.store.GetServers()
+}
+
+func (s *BackupService) LookupServer(id string) (model.Server, error) {
+	return lookupServer(s.store, id)
+}
+
+func (s *BackupService) SaveServer(srv model.Server) (model.Server, error) {
+	if s.store == nil {
+		return model.Server{}, fmt.Errorf("配置存储不可用")
+	}
+	normalized, err := normalizeServer(srv)
+	if err != nil {
+		return model.Server{}, err
+	}
+	servers := s.store.GetServers()
+	found := false
+	for i, existing := range servers {
+		if existing.ID == normalized.ID {
+			servers[i] = normalized
+			found = true
+			break
 		}
 	}
-	return nil
+	if !found {
+		servers = append(servers, normalized)
+	}
+	if err := s.store.SetServers(servers); err != nil {
+		return model.Server{}, err
+	}
+	return normalized, nil
+}
+
+func (s *BackupService) DeleteServer(id string) error {
+	if s.store == nil {
+		return fmt.Errorf("配置存储不可用")
+	}
+	return s.store.DeleteServer(strings.TrimSpace(id))
+}
+
+func (s *BackupService) BuildJobConfig(taskID string) (model.BackupConfig, error) {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return model.BackupConfig{}, fmt.Errorf("请先选择备份任务")
+	}
+	for _, t := range s.GetTasks() {
+		if t.ID == taskID {
+			return s.resolveJobFromTask(t)
+		}
+	}
+	return model.BackupConfig{}, fmt.Errorf("任务不存在: %s", taskID)
+}
+
+func (s *BackupService) resolveJobFromTask(task model.BackupTask) (model.BackupConfig, error) {
+	srv, err := lookupServer(s.store, task.ServerID)
+	if err != nil {
+		return model.BackupConfig{}, err
+	}
+	if !srv.SupportMultiFile {
+		return model.BackupConfig{}, fmt.Errorf("服务器不支持多文件备份")
+	}
+	return mergeServerTaskNotify(s.storedConfig(), srv, task), nil
 }
 
 func (s *BackupService) GetTasks() []model.BackupTask {
@@ -167,11 +217,22 @@ func (s *BackupService) SaveTasks(tasks []model.BackupTask) error {
 	for _, t := range tasks {
 		t.ID = strings.TrimSpace(t.ID)
 		t.Name = strings.TrimSpace(t.Name)
+		t.ServerID = strings.TrimSpace(t.ServerID)
 		t.RemoteSource = strings.TrimSpace(t.RemoteSource)
 		t.LocalDir = strings.TrimSpace(t.LocalDir)
 		t.PartNamePrefix = zipbak.SanitizePartPrefix(t.PartNamePrefix)
 		if t.ID == "" {
 			return fmt.Errorf("任务 ID 不能为空")
+		}
+		if t.ServerID == "" {
+			return fmt.Errorf("任务 %s 未选择服务器", t.DisplayName())
+		}
+		srv, err := lookupServer(s.store, t.ServerID)
+		if err != nil {
+			return err
+		}
+		if !srv.SupportMultiFile {
+			return fmt.Errorf("任务 %s 所选服务器不支持多文件备份", t.DisplayName())
 		}
 		if t.RemoteSource == "" {
 			return fmt.Errorf("任务 %s 的远程源目录不能为空", t.DisplayName())
