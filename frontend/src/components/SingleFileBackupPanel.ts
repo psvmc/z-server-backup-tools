@@ -1,4 +1,4 @@
-import { computed, nextTick, onMounted, ref, watch, type PropType } from "vue";
+import { computed, nextTick, ref, watch, type PropType } from "vue";
 import { message } from "ant-design-vue";
 import { Dialogs } from "@wailsio/runtime";
 import { BackupService } from "../../bindings/z-server-backup-tools/backend/service";
@@ -17,11 +17,16 @@ export const singleFileBackupPanelProps = {
     type: Boolean,
     default: false,
   },
+  panelActive: {
+    type: Boolean,
+    default: true,
+  },
 };
 
 export type SingleFileBackupPanelProps = {
   sshConfig: BackupConfig;
   disabledByOtherJob?: boolean;
+  panelActive?: boolean;
 };
 
 function isDialogCancelled(err: unknown): boolean {
@@ -36,8 +41,8 @@ function isDialogCancelled(err: unknown): boolean {
 }
 
 export function useSingleFileBackupPanel(props: SingleFileBackupPanelProps) {
-  const panelActive = ref(true);
-  const { paths, status, logs, saving, load, savePaths, start, stop } = useSingleFileBackup({
+  const panelActive = computed(() => props.panelActive !== false);
+  const { paths, status, logs, saving, savePaths, start, stop } = useSingleFileBackup({
     panelActive,
   });
 
@@ -116,13 +121,6 @@ export function useSingleFileBackupPanel(props: SingleFileBackupPanelProps) {
       prevLogLen.value = logs.value.length;
       void nextTick(scrollLogToBottom);
     }
-  });
-
-  onMounted(() => {
-    panelActive.value = true;
-    void load().catch((err) => {
-      console.warn("加载单文件配置失败:", err);
-    });
   });
 
   function onRemoteBrowse() {

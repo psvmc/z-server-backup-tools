@@ -7,10 +7,13 @@ import UpdateProgressDialog from "./components/UpdateProgressDialog.vue";
 import BackupSettingsDialog from "./components/BackupSettingsDialog.vue";
 import BackupTaskFormModal from "./components/BackupTaskFormModal.vue";
 import BackupRunPanel from "./components/BackupRunPanel.vue";
+import SingleFileBackupPanel from "./components/SingleFileBackupPanel.vue";
 import { useAppUpdate } from "./composables/useAppUpdate";
 import { useUpdateProgress } from "./composables/useUpdateProgress";
 import { useBackupJob } from "./composables/useBackupJob";
 import { useBackupTiming } from "./composables/useBackupTiming";
+import { useSingleFileBackup } from "./composables/useSingleFileBackup";
+import { useAppMainTabs, useJobExclusion } from "./AppTabs";
 import { downloadPhaseLabel } from "./utils/backupUi";
 
 import type { BackupConfig, BackupTask } from "./types/backup";
@@ -43,6 +46,10 @@ const {
   stopBackup,
   refreshStatus,
 } = useBackupJob();
+
+const { mainTab, singlePanelActive } = useAppMainTabs();
+const single = useSingleFileBackup({ panelActive: singlePanelActive });
+const { multiRunning, singleRunning } = useJobExclusion(status, single.status);
 
 const { elapsedText, remainingText } = useBackupTiming(status);
 
@@ -124,28 +131,42 @@ async function onTaskSaved() {
       </header>
 
       <div class="app-body">
-        <BackupRunPanel
-          :status="status"
-          :config="config"
-          :job-config="jobConfig"
-          :tasks="tasks"
-          :active-task-id="activeTaskId"
-          :phase-label="phaseLabel"
-          :elapsed-text="elapsedText"
-          :remaining-text="remainingText"
-          :logs="logs"
-          :init-loading="remoteInitLoading"
-          @start="startBackup"
-          @stop="stopBackup"
-          @refresh="refreshStatus"
-          @init="initRemote"
-          @reset="resetBackupTask"
-          @open-settings="settingsOpen = true"
-          @add-task="openAddTask"
-          @edit-task="openEditTask"
-          @select-task="selectTask"
-          @remove-task="removeTask"
-        />
+        <a-tabs v-model:activeKey="mainTab" class="app-main-tabs">
+          <template #rightExtra>
+            <a-button type="default" size="small" @click="settingsOpen = true">设置</a-button>
+          </template>
+          <a-tab-pane key="multi" tab="多文件备份" :disabled="singleRunning">
+            <BackupRunPanel
+              :status="status"
+              :config="config"
+              :job-config="jobConfig"
+              :tasks="tasks"
+              :active-task-id="activeTaskId"
+              :phase-label="phaseLabel"
+              :elapsed-text="elapsedText"
+              :remaining-text="remainingText"
+              :logs="logs"
+              :init-loading="remoteInitLoading"
+              @start="startBackup"
+              @stop="stopBackup"
+              @refresh="refreshStatus"
+              @init="initRemote"
+              @reset="resetBackupTask"
+              @open-settings="settingsOpen = true"
+              @add-task="openAddTask"
+              @edit-task="openEditTask"
+              @select-task="selectTask"
+              @remove-task="removeTask"
+            />
+          </a-tab-pane>
+          <a-tab-pane key="single" tab="单文件备份" :disabled="multiRunning">
+            <SingleFileBackupPanel
+              :ssh-config="config"
+              :disabled-by-other-job="multiRunning"
+              :panel-active="singlePanelActive"
+            />
+          </a-tab-pane>
+        </a-tabs>
       </div>
 
       <BackupSettingsDialog
