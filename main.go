@@ -26,6 +26,7 @@ func main() {
 	})
 
 	app.RegisterService(application.NewService(service.NewBackupService(app)))
+	app.RegisterService(application.NewService(service.NewSingleFileBackupService(app)))
 
 	if err := update.InitUpdater(app, AppVersion); err != nil {
 		log.Fatal(err)

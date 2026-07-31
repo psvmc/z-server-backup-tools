@@ -32,6 +32,28 @@ func SendBackupNotification(cfg model.BackupConfig, result BackupResult) error {
 	return sendConfiguredMail(cfg, to, subject, body)
 }
 
+// SendSingleFileNotification emails when a single-file download finishes or fails.
+func SendSingleFileNotification(cfg model.BackupConfig, success bool, remoteFile, localPath, errMsg string) error {
+	to := strings.TrimSpace(cfg.NotifyEmail)
+	if to == "" {
+		return nil
+	}
+	host := strings.TrimSpace(cfg.Host)
+	if host == "" {
+		host = "（未知）"
+	}
+	now := time.Now().Format("2006-01-02 15:04:05")
+	var subject, body string
+	if success {
+		subject = fmt.Sprintf("[单文件下载完成] %s", host)
+		body = fmt.Sprintf("单文件下载已完成。\n\n时间：%s\n主机：%s\n远程文件：%s\n本机文件：%s\n", now, host, remoteFile, localPath)
+	} else {
+		subject = fmt.Sprintf("[单文件下载异常] %s", host)
+		body = fmt.Sprintf("单文件下载异常停止。\n\n时间：%s\n主机：%s\n远程文件：%s\n本机文件：%s\n错误：%s\n", now, host, remoteFile, localPath, errMsg)
+	}
+	return sendConfiguredMail(cfg, to, subject, body)
+}
+
 // SendTestEmail sends a simple test message using the configured SMTP settings.
 func SendTestEmail(cfg model.BackupConfig) error {
 	to := strings.TrimSpace(cfg.NotifyEmail)
