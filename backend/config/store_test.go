@@ -48,3 +48,23 @@ func TestStoreSaveBackupRoundTrip(t *testing.T) {
 		t.Fatalf("password not loaded: %q", s2.Backup.Password)
 	}
 }
+
+func TestStoreSingleFileBackupRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	s := &Store{filePath: path}
+	s.SingleFile = model.SingleFileConfig{
+		RemoteFile: `D:\data\app.bak`,
+		LocalDir:   `C:\backup`,
+	}
+	if err := s.save(); err != nil {
+		t.Fatal(err)
+	}
+	s2 := &Store{filePath: path}
+	if err := s2.load(); err != nil {
+		t.Fatal(err)
+	}
+	if s2.SingleFile.RemoteFile != `D:\data\app.bak` || s2.SingleFile.LocalDir != `C:\backup` {
+		t.Fatalf("got %+v", s2.SingleFile)
+	}
+}

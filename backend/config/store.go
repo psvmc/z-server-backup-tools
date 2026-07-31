@@ -18,6 +18,7 @@ type diskConfig struct {
 	BackupTasks          []model.BackupTask        `json:"backupTasks,omitempty"`
 	ActiveTaskID         string                    `json:"activeTaskId,omitempty"`
 	BackupTiming         model.BackupTimingSession `json:"backupTiming,omitempty"`
+	SingleFile           model.SingleFileConfig    `json:"singleFileBackup,omitempty"`
 }
 
 type Store struct {
@@ -28,6 +29,7 @@ type Store struct {
 	BackupTasks          []model.BackupTask
 	ActiveTaskID         string
 	BackupTiming         model.BackupTimingSession
+	SingleFile           model.SingleFileConfig
 }
 
 var (
@@ -80,6 +82,7 @@ func (s *Store) load() error {
 	s.BackupTasks = payload.BackupTasks
 	s.ActiveTaskID = payload.ActiveTaskID
 	s.BackupTiming = payload.BackupTiming
+	s.SingleFile = payload.SingleFile
 	if s.migrateLegacyTask() {
 		return s.save()
 	}
@@ -121,6 +124,7 @@ func (s *Store) save() error {
 		BackupTasks:          s.BackupTasks,
 		ActiveTaskID:         s.ActiveTaskID,
 		BackupTiming:         s.BackupTiming,
+		SingleFile:           s.SingleFile,
 	}
 	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
@@ -226,5 +230,21 @@ func (s *Store) SetActiveTaskID(id string) error {
 		return err
 	}
 	s.ActiveTaskID = strings.TrimSpace(id)
+	return s.save()
+}
+
+func (s *Store) GetSingleFileConfig() model.SingleFileConfig {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.SingleFile
+}
+
+func (s *Store) SetSingleFileConfig(cfg model.SingleFileConfig) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.load(); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	s.SingleFile = cfg
 	return s.save()
 }
