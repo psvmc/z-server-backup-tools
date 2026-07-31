@@ -88,24 +88,8 @@ func (s *BackupService) storedConfig() model.BackupConfig {
 	return s.store.GetBackupConfig()
 }
 
-func (s *BackupService) SaveConnectionConfig(cfg model.BackupConfig) error {
-	if s.store == nil {
-		return fmt.Errorf("配置存储不可用")
-	}
-	cfg.Host = strings.TrimSpace(cfg.Host)
-	cfg.User = strings.TrimSpace(cfg.User)
-	if cfg.Host == "" || cfg.User == "" {
-		return fmt.Errorf("主机与用户名不能为空")
-	}
-	if cfg.Port == 0 {
-		cfg.Port = 22
-	}
-	stored := s.storedConfig()
-	stored.Host = cfg.Host
-	stored.User = cfg.User
-	stored.Password = cfg.Password
-	stored.Port = cfg.Port
-	return s.store.SetBackupConfig(stored)
+func (s *BackupService) SaveConnectionConfig(_ model.BackupConfig) error {
+	return fmt.Errorf("请在「服务器管理」中保存 SSH 连接")
 }
 
 func (s *BackupService) SavePathsConfig(cfg model.BackupConfig) error {
@@ -199,6 +183,16 @@ func (s *BackupService) resolveJobFromTask(task model.BackupTask) (model.BackupC
 		return model.BackupConfig{}, fmt.Errorf("服务器不支持多文件备份")
 	}
 	return mergeServerTaskNotify(s.storedConfig(), srv, task), nil
+}
+
+// prepareMultiFileJob resolves SSH/remote_app/paths from store via task.server_id
+// and ignores frontend-supplied connection fields. Keeps prepareBackupJob validation.
+func (s *BackupService) prepareMultiFileJob(cfg model.BackupConfig) (model.BackupConfig, error) {
+	merged, err := s.BuildJobConfig(cfg.TaskID)
+	if err != nil {
+		return model.BackupConfig{}, err
+	}
+	return prepareBackupJob(merged)
 }
 
 func (s *BackupService) GetTasks() []model.BackupTask {
@@ -328,7 +322,7 @@ func (s *BackupService) TestConnection(cfg model.BackupConfig) error {
 }
 
 func (s *BackupService) InitRemote(cfg model.BackupConfig) error {
-	prepared, err := prepareBackupJob(cfg)
+	prepared, err := s.prepareMultiFileJob(cfg)
 	if err != nil {
 		return err
 	}
@@ -385,7 +379,7 @@ func (s *BackupService) ResetBackupTask(cfg model.BackupConfig) error {
 	}
 	s.mu.Unlock()
 
-	prepared, err := prepareBackupJob(cfg)
+	prepared, err := s.prepareMultiFileJob(cfg)
 	if err != nil {
 		return err
 	}
@@ -417,7 +411,7 @@ func (s *BackupService) ResetBackupTask(cfg model.BackupConfig) error {
 }
 
 func (s *BackupService) RefreshRemoteStatus(cfg model.BackupConfig) error {
-	prepared, err := prepareBackupJob(cfg)
+	prepared, err := s.prepareMultiFileJob(cfg)
 	if err != nil {
 		s.mu.Lock()
 		s.status.RemoteHint = ""
@@ -469,12 +463,12 @@ func (s *BackupService) GetLogs() []string {
 }
 
 func (s *BackupService) StartBackup(cfg model.BackupConfig) error {
-	prepared, err := prepareBackupJob(cfg)
+	prepared, err := s.prepareMultiFileJob(cfg)
 	if err != nil {
 		return err
 	}
-	if s.store != nil && strings.TrimSpace(cfg.TaskID) != "" {
-		_ = s.store.SetActiveTaskID(cfg.TaskID)
+	if s.store != nil && strings.TrimSpace(prepared.TaskID) != "" {
+		_ = s.store.SetActiveTaskID(prepared.TaskID)
 	}
 
 	s.mu.Lock()
