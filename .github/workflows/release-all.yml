@@ -100,15 +100,36 @@ jobs:
               exit 1
             fi
             if [ -f dist/zipbak-srv.exe ]; then
-              cp -f dist/zipbak-srv.exe release/
+              cp -f dist/zipbak-srv.exe release/zipbak-srv.exe
             else
               echo "::error::zipbak-srv.exe not found in dist/"
               exit 1
             fi
+            # Windows/MSYS：同目录不能同时可靠存在 zipbak-srv 与 zipbak-srv.exe
+            # （无后缀名会被映射到 .exe，导致 Linux 产物覆盖 Windows exe）。
+            # 发布资产使用明确名称 zipbak-srv-linux-amd64。
             if [ -f dist/zipbak-srv ]; then
-              cp -f dist/zipbak-srv release/
+              cp -f dist/zipbak-srv release/zipbak-srv-linux-amd64
             else
               echo "::error::zipbak-srv (linux) not found in dist/"
+              exit 1
+            fi
+            if [ ! -f release/zipbak-srv-linux-amd64 ]; then
+              echo "::error::release/zipbak-srv-linux-amd64 missing after copy"
+              ls -la release/ || true
+              exit 1
+            fi
+            if [ ! -f release/zipbak-srv.exe ]; then
+              echo "::error::release/zipbak-srv.exe missing after copy"
+              ls -la release/ || true
+              exit 1
+            fi
+            # 尺寸应不同：若 linux 覆盖了 exe，两者会变成同一文件
+            win_size="$(wc -c < release/zipbak-srv.exe | tr -d ' ')"
+            linux_size="$(wc -c < release/zipbak-srv-linux-amd64 | tr -d ' ')"
+            echo "zipbak-srv.exe size=${win_size} zipbak-srv-linux-amd64 size=${linux_size}"
+            if [ "$win_size" = "$linux_size" ]; then
+              echo "::error::Windows/Linux zipbak sizes identical — likely MSYS name collision"
               exit 1
             fi
           elif [ "${{ matrix.platform }}" = "linux" ]; then
@@ -189,6 +210,16 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+
+      - name: Verify release assets before publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== downloaded artifacts ==="
+          ls -la dist/ || true
+          test -f dist/zipbak-srv.exe
+          test -f dist/zipbak-srv-linux-amd64
+          echo "zipbak Windows/Linux assets present"
 
       - name: Publish to GitHub Release
         uses: softprops/action-gh-release@v2

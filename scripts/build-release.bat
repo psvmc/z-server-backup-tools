@@ -39,5 +39,6 @@ echo [ZServerBackup] Done. Output: dist\
 echo   Client: ZServerBackup.exe + *-installer.exe
 echo   Server: zipbak-srv.exe  ^(copy to remote Windows app dir^)
 echo           zipbak-srv      ^(copy to remote Linux app dir, chmod +x^)
+echo   Release asset name for Linux: zipbak-srv-linux-amd64
 dir /b dist\*.exe 2>nul
 exit /b 0
