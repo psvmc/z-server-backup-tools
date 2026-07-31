@@ -2,7 +2,8 @@ import { computed, nextTick, ref, watch, type PropType } from "vue";
 import { message } from "ant-design-vue";
 import { Dialogs } from "@wailsio/runtime";
 import { BackupService } from "../../bindings/z-server-backup-tools/backend/service";
-import type { BackupConfig } from "../types/backup";
+import type { BackupConfig, Server } from "../types/backup";
+import { applyServer, emptyNotifyConfig } from "../types/backup";
 import { formatError } from "../types/update";
 import { formatSpeed } from "../utils/backupUi";
 import { formatBytes } from "../utils/size";
@@ -12,6 +13,10 @@ export const singleFileBackupPanelProps = {
   sshConfig: {
     type: Object as PropType<BackupConfig>,
     required: true as const,
+  },
+  servers: {
+    type: Array as PropType<Server[]>,
+    default: () => [],
   },
   disabledByOtherJob: {
     type: Boolean,
@@ -25,6 +30,7 @@ export const singleFileBackupPanelProps = {
 
 export type SingleFileBackupPanelProps = {
   sshConfig: BackupConfig;
+  servers?: Server[];
   disabledByOtherJob?: boolean;
   panelActive?: boolean;
 };
@@ -49,6 +55,17 @@ export function useSingleFileBackupPanel(props: SingleFileBackupPanelProps) {
   const autoScrollLog = ref(false);
   const logBoxRef = ref<HTMLElement | null>(null);
   const prevLogLen = ref(0);
+
+  const serverOptions = computed(() =>
+    (props.servers ?? []).map((s) => ({
+      value: s.id,
+      label: s.name?.trim() || s.host || s.id,
+    })),
+  );
+
+  const selectedServer = computed(
+    () => (props.servers ?? []).find((s) => s.id === paths.value.server_id) ?? null,
+  );
 
   const progressPercent = computed(() => {
     const total = status.value.downloadBytesTotal ?? 0;
@@ -89,6 +106,7 @@ export function useSingleFileBackupPanel(props: SingleFileBackupPanelProps) {
     () =>
       !!props.disabledByOtherJob ||
       status.value.running ||
+      !paths.value.server_id?.trim() ||
       !paths.value.remote_file?.trim() ||
       !paths.value.local_dir?.trim(),
   );
@@ -159,6 +177,10 @@ export function useSingleFileBackupPanel(props: SingleFileBackupPanelProps) {
   }
 
   async function onSave() {
+    if (!paths.value.server_id?.trim()) {
+      message.warning("请选择服务器");
+      return;
+    }
     if (!paths.value.remote_file?.trim()) {
       message.warning("请填写远程源文件路径");
       return;
@@ -175,6 +197,10 @@ export function useSingleFileBackupPanel(props: SingleFileBackupPanelProps) {
       message.warning("已有多文件备份任务在运行");
       return;
     }
+    if (!paths.value.server_id?.trim()) {
+      message.warning("请选择服务器");
+      return;
+    }
     if (!paths.value.remote_file?.trim()) {
       message.warning("请填写远程源文件路径");
       return;
@@ -183,7 +209,9 @@ export function useSingleFileBackupPanel(props: SingleFileBackupPanelProps) {
       message.warning("请填写本机保存目录");
       return;
     }
-    await start(props.sshConfig);
+    // 后端以 store 的 server_id 为准；此处合并所选服务器 SSH 作为入参兜底
+    const ssh = applyServer(props.sshConfig ?? emptyNotifyConfig(), selectedServer.value);
+    await start(ssh);
   }
 
   function onStop() {
@@ -203,6 +231,7 @@ export function useSingleFileBackupPanel(props: SingleFileBackupPanelProps) {
     saving,
     autoScrollLog,
     logBoxRef,
+    serverOptions,
     progressPercent,
     progressText,
     progressFormat,

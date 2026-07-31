@@ -29,6 +29,7 @@ const { checkOnStartup, checkForUpdate, loadCurrentVersion } = useAppUpdate();
 const { updateProgress } = useUpdateProgress();
 const {
   config,
+  servers,
   tasks,
   activeTaskId,
   activeTask,
@@ -171,6 +172,7 @@ function onServersChanged() {
           <a-tab-pane key="single" tab="单文件备份" :disabled="multiRunning">
             <SingleFileBackupPanel
               :ssh-config="config"
+              :servers="servers"
               :disabled-by-other-job="multiRunning"
               :panel-active="singlePanelActive"
             />
@@ -191,6 +193,7 @@ function onServersChanged() {
       <BackupTaskFormModal
         v-model:open="taskFormOpen"
         :connection="config"
+        :servers="servers"
         :task="editingTask"
         @saved="onTaskSaved"
       />

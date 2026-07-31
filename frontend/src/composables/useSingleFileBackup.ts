@@ -10,6 +10,7 @@ import type { BackupConfig, JobStatus, SingleFileConfig } from "../types/backup"
 import { formatError } from "../types/update";
 
 const defaultPaths = (): SingleFileConfig => ({
+  server_id: "",
   remote_file: "",
   local_dir: "",
 });

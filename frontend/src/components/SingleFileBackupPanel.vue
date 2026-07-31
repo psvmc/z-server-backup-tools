@@ -9,6 +9,7 @@ const {
   saving,
   autoScrollLog,
   logBoxRef,
+  serverOptions,
   progressPercent,
   progressText,
   progressFormat,
@@ -36,6 +37,17 @@ const {
       <div class="panel-card-body single-file-backup-panel__body">
         <div class="single-file-backup-panel__main">
           <a-form layout="vertical" size="small" class="single-file-backup-panel__form">
+            <a-form-item label="服务器" required>
+              <a-select
+                v-model:value="paths.server_id"
+                :options="serverOptions"
+                placeholder="选择服务器"
+                allow-clear
+                show-search
+                option-filter-prop="label"
+                :disabled="status.running"
+              />
+            </a-form-item>
             <a-form-item label="远程源文件">
               <PathPickInput
                 v-model="paths.remote_file"
