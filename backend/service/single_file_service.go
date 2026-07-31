@@ -32,6 +32,21 @@ func NewSingleFileBackupService(app *application.App) *SingleFileBackupService {
 	return &SingleFileBackupService{app: app, store: store}
 }
 
+func taskToSinglePaths(t model.BackupTask) (model.SingleFileConfig, error) {
+	if t.NormalizedKind() != "single" {
+		return model.SingleFileConfig{}, fmt.Errorf("不是单文件任务")
+	}
+	if strings.TrimSpace(t.ServerID) == "" {
+		return model.SingleFileConfig{}, fmt.Errorf("请选择服务器")
+	}
+	rf := strings.TrimSpace(t.RemoteSource)
+	ld := strings.TrimSpace(t.LocalDir)
+	if rf == "" || ld == "" {
+		return model.SingleFileConfig{}, fmt.Errorf("远程文件与本机目录不能为空")
+	}
+	return model.SingleFileConfig{ServerID: t.ServerID, RemoteFile: rf, LocalDir: ld}, nil
+}
+
 func singleFileLocalPath(remoteFile, localDir string) (string, error) {
 	remoteFile = strings.TrimSpace(remoteFile)
 	localDir = strings.TrimSpace(localDir)
@@ -92,23 +107,40 @@ func (s *SingleFileBackupService) GetLogs() []string {
 	return out
 }
 
-func (s *SingleFileBackupService) StartDownload(sshCfg model.BackupConfig, paths model.SingleFileConfig) error {
-	_ = sshCfg // 入参 SSH 仅作前端兜底；实际以 store 中 Server + 邮件为准
-	srv, err := lookupServer(s.store, paths.ServerID)
+func (s *SingleFileBackupService) StartDownload() error {
+	if s.store == nil {
+		return fmt.Errorf("配置存储不可用")
+	}
+	activeID := strings.TrimSpace(s.store.GetActiveSingleFileTaskID())
+	if activeID == "" {
+		return fmt.Errorf("请先添加并选择单文件任务")
+	}
+	var task model.BackupTask
+	found := false
+	for _, t := range s.store.GetBackupTasks() {
+		if t.ID == activeID {
+			task = t
+			found = true
+			break
+		}
+	}
+	if !found || task.NormalizedKind() != "single" {
+		return fmt.Errorf("当前单文件任务无效，请重新选择")
+	}
+	paths, err := taskToSinglePaths(task)
 	if err != nil {
 		return err
 	}
-	notify := model.BackupConfig{}
-	if s.store != nil {
-		notify = s.store.GetBackupConfig()
+	srv, err := lookupServer(s.store, task.ServerID)
+	if err != nil {
+		return err
 	}
+	notify := s.store.GetBackupConfig()
 	cfg := srv.ApplyTo(notify)
 	prepared, err := prepareSSH(cfg)
 	if err != nil {
 		return err
 	}
-	paths.RemoteFile = strings.TrimSpace(paths.RemoteFile)
-	paths.LocalDir = strings.TrimSpace(paths.LocalDir)
 	localPath, err := singleFileLocalPath(paths.RemoteFile, paths.LocalDir)
 	if err != nil {
 		return err
