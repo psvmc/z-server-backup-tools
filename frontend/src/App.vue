@@ -8,6 +8,7 @@ import BackupSettingsDialog from "./components/BackupSettingsDialog.vue";
 import BackupTaskFormModal from "./components/BackupTaskFormModal.vue";
 import BackupRunPanel from "./components/BackupRunPanel.vue";
 import SingleFileBackupPanel from "./components/SingleFileBackupPanel.vue";
+import ServerManageDialog from "./components/ServerManageDialog.vue";
 import { useAppUpdate } from "./composables/useAppUpdate";
 import { useUpdateProgress } from "./composables/useUpdateProgress";
 import { useBackupJob } from "./composables/useBackupJob";
@@ -21,6 +22,7 @@ import type { BackupConfig, BackupTask } from "./types/backup";
 
 const appTitle = ref("服务器文件备份");
 const settingsOpen = ref(false);
+const serversOpen = ref(false);
 const taskFormOpen = ref(false);
 const editingTask = ref<BackupTask | null>(null);
 const { checkOnStartup, checkForUpdate, loadCurrentVersion } = useAppUpdate();
@@ -36,6 +38,7 @@ const {
   logs,
   settingsSaving,
   remoteInitLoading,
+  loadServers,
   loadTasks,
   selectTask,
   removeTask,
@@ -118,6 +121,10 @@ async function onTaskSaved() {
   await loadTasks();
   await refreshStatus();
 }
+
+function onServersChanged() {
+  void loadServers();
+}
 </script>
 
 <template>
@@ -133,7 +140,10 @@ async function onTaskSaved() {
       <div class="app-body">
         <a-tabs v-model:activeKey="mainTab" class="app-main-tabs">
           <template #rightExtra>
-            <a-button type="default" size="small" @click="settingsOpen = true">通知设置</a-button>
+            <a-space :size="8">
+              <a-button type="default" size="small" @click="serversOpen = true">服务器管理</a-button>
+              <a-button type="default" size="small" @click="settingsOpen = true">通知设置</a-button>
+            </a-space>
           </template>
           <a-tab-pane key="multi" tab="多文件备份" :disabled="singleRunning">
             <BackupRunPanel
@@ -175,6 +185,8 @@ async function onTaskSaved() {
         :saving="settingsSaving"
         @save-notify="onSaveNotify"
       />
+
+      <ServerManageDialog v-model:open="serversOpen" @changed="onServersChanged" />
 
       <BackupTaskFormModal
         v-model:open="taskFormOpen"
