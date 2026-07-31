@@ -331,9 +331,9 @@ func (s *BackupService) InitRemote(cfg model.BackupConfig) error {
 		return err
 	}
 	defer cli.Close()
-	source := util.NormalizeRemotePath(prepared.RemoteSource)
-	state := util.NormalizeRemotePath(prepared.RemoteState)
-	staging := util.NormalizeRemotePath(prepared.RemoteStaging)
+	source := util.NormalizeRemotePathForOS(prepared.RemoteSource, prepared.OSType)
+	state := util.NormalizeRemotePathForOS(prepared.RemoteState, prepared.OSType)
+	staging := util.NormalizeRemotePathForOS(prepared.RemoteStaging, prepared.OSType)
 	prefix := zipbak.SanitizePartPrefix(prepared.PartNamePrefix)
 	args := []string{
 		"init",
@@ -346,6 +346,9 @@ func (s *BackupService) InitRemote(cfg model.BackupConfig) error {
 	}
 	_, err = cli.RunRemote(args...)
 	if err != nil {
+		if model.IsLinuxOS(prepared.OSType) {
+			s.appendLog("请确认已放置 zipbak-srv 并 chmod +x")
+		}
 		return err
 	}
 
@@ -388,7 +391,7 @@ func (s *BackupService) ResetBackupTask(cfg model.BackupConfig) error {
 		return err
 	}
 	defer cli.Close()
-	state := util.NormalizeRemotePath(prepared.RemoteState)
+	state := util.NormalizeRemotePathForOS(prepared.RemoteState, prepared.OSType)
 	if _, err := cli.RunRemote("reset", "--state", state); err != nil {
 		return err
 	}

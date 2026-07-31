@@ -60,3 +60,15 @@ func QuoteWindowsArg(s string) string {
 	}
 	return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
 }
+
+// QuoteShellArg quotes s for POSIX shells. Plain tokens are returned as-is;
+// otherwise single quotes are used, with internal ' escaped as '\''.
+func QuoteShellArg(s string) string {
+	if s == "" {
+		return `''`
+	}
+	if !strings.ContainsAny(s, " \t'\"\\$`!*?;&|()<>[]{}#~") {
+		return s
+	}
+	return `'` + strings.ReplaceAll(s, `'`, `'"'"'`) + `'`
+}

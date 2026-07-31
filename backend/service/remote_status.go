@@ -13,7 +13,7 @@ func queryRemoteStatus(cfg model.BackupConfig) (zipbak.Status, error) {
 		return zipbak.Status{}, err
 	}
 	defer cli.Close()
-	state := util.NormalizeRemotePath(cfg.RemoteState)
+	state := util.NormalizeRemotePathForOS(cfg.RemoteState, cfg.OSType)
 	maxGB := formatMaxGBFlag(cfg)
 	out, err := cli.RunRemote("status", "--state", state, "--max-gb", maxGB)
 	if err != nil {

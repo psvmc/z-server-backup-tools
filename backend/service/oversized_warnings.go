@@ -15,7 +15,7 @@ func queryRemoteOversized(cfg model.BackupConfig) ([]zipbak.OversizedFile, int64
 		return nil, 0, err
 	}
 	defer cli.Close()
-	state := util.NormalizeRemotePath(cfg.RemoteState)
+	state := util.NormalizeRemotePathForOS(cfg.RemoteState, cfg.OSType)
 	maxGB := formatMaxGBFlag(cfg)
 	out, err := cli.RunRemote("oversized", "--state", state, "--max-gb", maxGB)
 	if err != nil {

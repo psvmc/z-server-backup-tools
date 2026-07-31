@@ -10,7 +10,6 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"z-server-backup-tools/backend/model"
-	"z-server-backup-tools/backend/util"
 )
 
 type Client struct {
@@ -57,12 +56,7 @@ func (c *Client) RunRemote(argv ...string) (string, error) {
 }
 
 func (c *Client) RunRemoteWithStderr(argv ...string) (stdout, stderr string, err error) {
-	srv := util.NormalizeRemotePath(c.cfg.RemoteSrv)
-	parts := []string{util.QuoteWindowsArg(srv)}
-	for _, a := range argv {
-		parts = append(parts, util.QuoteWindowsArg(a))
-	}
-	cmd := strings.Join(parts, " ")
+	cmd := BuildRemoteCommand(c.cfg.OSType, c.cfg.RemoteSrv, argv...)
 	return c.run(cmd)
 }
 

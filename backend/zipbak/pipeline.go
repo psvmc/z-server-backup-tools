@@ -166,7 +166,7 @@ func (p *Pipeline) remotePack() (string, error) {
 		return "", err
 	}
 	defer cli.Close()
-	state := util.NormalizeRemotePath(p.cfg.RemoteState)
+	state := util.NormalizeRemotePathForOS(p.cfg.RemoteState, p.cfg.OSType)
 	out, stderr, err := cli.RunRemoteWithStderr("pack", "--state", state, "--max-gb", p.maxGBFlag())
 	if err != nil {
 		return "", err
@@ -183,7 +183,7 @@ func (p *Pipeline) remotePackAhead() (string, error) {
 		return "", err
 	}
 	defer cli.Close()
-	state := util.NormalizeRemotePath(p.cfg.RemoteState)
+	state := util.NormalizeRemotePathForOS(p.cfg.RemoteState, p.cfg.OSType)
 	out, stderr, err := cli.RunRemoteWithStderr("pack-ahead", "--state", state, "--max-gb", p.maxGBFlag())
 	if err != nil {
 		return "", err
@@ -200,7 +200,7 @@ func (p *Pipeline) remoteAck() error {
 		return err
 	}
 	defer cli.Close()
-	state := util.NormalizeRemotePath(p.cfg.RemoteState)
+	state := util.NormalizeRemotePathForOS(p.cfg.RemoteState, p.cfg.OSType)
 	_, err = cli.RunRemote("ack", "--state", state)
 	return err
 }
@@ -211,7 +211,7 @@ func (p *Pipeline) download(ctx context.Context, remotePath, localPath string) e
 		return err
 	}
 	defer sc.Close()
-	remotePath = util.NormalizeRemotePath(remotePath)
+	remotePath = util.NormalizeRemotePathForOS(remotePath, p.cfg.OSType)
 
 	var progMu sync.Mutex
 	var lastMark time.Time
@@ -257,7 +257,7 @@ func (p *Pipeline) deleteRemote(remotePath string) error {
 		return err
 	}
 	defer sc.Close()
-	return sc.Remove(util.NormalizeRemotePath(remotePath))
+	return sc.Remove(util.NormalizeRemotePathForOS(remotePath, p.cfg.OSType))
 }
 
 func (p *Pipeline) refreshStatus() error {
@@ -266,7 +266,7 @@ func (p *Pipeline) refreshStatus() error {
 		return err
 	}
 	defer cli.Close()
-	state := util.NormalizeRemotePath(p.cfg.RemoteState)
+	state := util.NormalizeRemotePathForOS(p.cfg.RemoteState, p.cfg.OSType)
 	out, err := cli.RunRemote("status", "--state", state, "--max-gb", p.maxGBFlag())
 	if err != nil {
 		return err
