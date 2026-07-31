@@ -7,7 +7,7 @@ import {
   Server as ServerBinding,
 } from "../../bindings/z-server-backup-tools/backend/model/models";
 import type { BackupConfig, BackupTask, JobStatus, Server } from "../types/backup";
-import { emptyNotifyConfig, mergeJobConfig } from "../types/backup";
+import { emptyNotifyConfig, isMultiTask, mergeJobConfig } from "../types/backup";
 import { formatError } from "../types/update";
 
 function toBindingConfig(cfg: BackupConfig) {
@@ -29,7 +29,8 @@ function bindingToPlainServer(srv: ServerBinding): Server {
 export function useBackupJob() {
   const config = ref<BackupConfig>(emptyNotifyConfig());
   const servers = ref<Server[]>([]);
-  const tasks = ref<BackupTask[]>([]);
+  const allTasks = ref<BackupTask[]>([]);
+  const tasks = computed(() => allTasks.value.filter(isMultiTask));
   const activeTaskId = ref("");
   const status = ref<JobStatus>({
     running: false,
@@ -100,10 +101,11 @@ export function useBackupJob() {
   };
 
   const loadTasks = async () => {
-    tasks.value = (await BackupService.GetTasks()) as BackupTask[];
+    allTasks.value = (await BackupService.GetTasks()) as BackupTask[];
     activeTaskId.value = await BackupService.GetActiveTaskID();
-    if (!activeTaskId.value && tasks.value.length > 0) {
-      activeTaskId.value = tasks.value[0].id;
+    const multi = tasks.value;
+    if (!activeTaskId.value && multi.length > 0) {
+      activeTaskId.value = multi[0].id;
       await BackupService.SetActiveTaskID(activeTaskId.value);
     }
   };
@@ -161,17 +163,15 @@ export function useBackupJob() {
   const removeTask = async (task: BackupTask) => {
     const hide = message.loading("删除任务中...", 0);
     try {
-      const next = tasks.value.filter((t) => t.id !== task.id);
+      const current = (await BackupService.GetTasks()) as BackupTask[];
+      const next = current.filter((t) => t.id !== task.id);
       await BackupService.SaveTasks(next);
-      tasks.value = next;
       if (activeTaskId.value === task.id) {
-        activeTaskId.value = next[0]?.id ?? "";
-        if (activeTaskId.value) {
-          await BackupService.SetActiveTaskID(activeTaskId.value);
-        } else {
-          await BackupService.SetActiveTaskID("");
-        }
+        const remainingMulti = next.filter(isMultiTask);
+        activeTaskId.value = remainingMulti[0]?.id ?? "";
+        await BackupService.SetActiveTaskID(activeTaskId.value);
       }
+      await loadTasks();
       await refreshStatus();
       hide();
       message.success("任务已删除");

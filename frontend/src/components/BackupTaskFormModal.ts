@@ -2,9 +2,10 @@ import { computed, ref, watch, type PropType, type Ref } from "vue";
 import { message } from "ant-design-vue";
 import { Dialogs } from "@wailsio/runtime";
 import { BackupService } from "../../bindings/z-server-backup-tools/backend/service";
-import type { BackupConfig, BackupTask, Server } from "../types/backup";
+import type { BackupConfig, BackupTask, BackupTaskKind, Server } from "../types/backup";
 import { applyServer, emptyNotifyConfig, newTaskId } from "../types/backup";
 import { formatError } from "../types/update";
+import type { RemotePickerMode } from "./RemoteDirPickerModal";
 
 export const backupTaskFormModalProps = {
   connection: {
@@ -19,12 +20,17 @@ export const backupTaskFormModalProps = {
     type: Object as PropType<BackupTask | null>,
     default: null,
   },
+  kind: {
+    type: String as PropType<BackupTaskKind>,
+    default: "multi" as const,
+  },
 };
 
 export type BackupTaskFormModalProps = {
   connection: BackupConfig;
   servers?: Server[];
   task?: BackupTask | null;
+  kind?: BackupTaskKind;
 };
 
 export type BackupTaskFormModalEmit = {
@@ -60,24 +66,43 @@ export function useBackupTaskFormModal(
   const saving = ref(false);
 
   const isEdit = computed(() => !!props.task?.id);
+  const isSingle = computed(() => props.kind === "single");
+  const isMulti = computed(() => !isSingle.value);
 
-  const multiFileServers = computed(() =>
-    (props.servers ?? []).filter((s) => s.support_multi_file),
-  );
+  const eligibleServers = computed(() => {
+    const list = props.servers ?? [];
+    return isSingle.value ? list : list.filter((s) => s.support_multi_file);
+  });
 
   const serverOptions = computed(() =>
-    multiFileServers.value.map((s) => ({
+    eligibleServers.value.map((s) => ({
       value: s.id,
       label: s.name?.trim() || s.host || s.id,
     })),
   );
 
   const selectedServer = computed(
-    () => multiFileServers.value.find((s) => s.id === form.value.server_id) ?? null,
+    () => eligibleServers.value.find((s) => s.id === form.value.server_id) ?? null,
   );
 
   const connectionForPicker = computed(() =>
     applyServer(props.connection ?? emptyNotifyConfig(), selectedServer.value),
+  );
+
+  const remotePickerMode = computed<RemotePickerMode>(() =>
+    isSingle.value ? "file" : "directory",
+  );
+
+  const remoteSourceLabel = computed(() =>
+    isSingle.value ? "远程源文件" : "远程源目录 (--dir)",
+  );
+
+  const remotePickerTitle = computed(() =>
+    isSingle.value ? "选择远程源文件" : "选择远程源目录",
+  );
+
+  const serverPlaceholder = computed(() =>
+    isSingle.value ? "选择服务器" : "选择支持多文件备份的服务器",
   );
 
   watch(
@@ -113,7 +138,11 @@ export function useBackupTaskFormModal(
       return false;
     }
     if (!selectedServer.value) {
-      message.warning("所选服务器不可用或不支持多文件备份");
+      if (isSingle.value) {
+        message.warning("所选服务器不可用");
+      } else {
+        message.warning("所选服务器不可用或不支持多文件备份");
+      }
       return false;
     }
     return true;
@@ -158,7 +187,7 @@ export function useBackupTaskFormModal(
   async function onSubmit() {
     if (!ensureServerSelected()) return;
     if (!form.value.remote_source?.trim()) {
-      message.warning("请填写远程源目录");
+      message.warning(isSingle.value ? "请填写远程源文件" : "请填写远程源目录");
       return;
     }
     if (!form.value.local_dir?.trim()) {
@@ -170,11 +199,14 @@ export function useBackupTaskFormModal(
       const current = (await BackupService.GetTasks()) as BackupTask[];
       const payload: BackupTask = {
         id: isEdit.value ? form.value.id : newTaskId(),
+        kind: props.kind ?? "multi",
         name: form.value.name?.trim() || undefined,
         server_id: form.value.server_id!.trim(),
         remote_source: form.value.remote_source.trim(),
         local_dir: form.value.local_dir.trim(),
-        part_name_prefix: form.value.part_name_prefix?.trim() || undefined,
+        part_name_prefix: isMulti.value
+          ? form.value.part_name_prefix?.trim() || undefined
+          : undefined,
       };
       let next: BackupTask[];
       if (isEdit.value) {
@@ -184,7 +216,11 @@ export function useBackupTaskFormModal(
       }
       await BackupService.SaveTasks(next);
       if (!isEdit.value) {
-        await BackupService.SetActiveTaskID(payload.id);
+        if (isSingle.value) {
+          await BackupService.SetActiveSingleFileTaskID(payload.id);
+        } else {
+          await BackupService.SetActiveTaskID(payload.id);
+        }
       }
       message.success(isEdit.value ? "任务已更新" : "任务已添加");
       open.value = false;
@@ -201,8 +237,14 @@ export function useBackupTaskFormModal(
     remotePickerOpen,
     saving,
     isEdit,
+    isSingle,
+    isMulti,
     serverOptions,
     connectionForPicker,
+    remotePickerMode,
+    remoteSourceLabel,
+    remotePickerTitle,
+    serverPlaceholder,
     openRemotePicker,
     pickLocalDir,
     openFolder,

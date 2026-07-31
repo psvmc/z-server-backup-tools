@@ -34,13 +34,28 @@ export interface Server {
   max_part_gb?: number;
 }
 
+export type BackupTaskKind = "multi" | "single";
+
 export interface BackupTask {
   id: string;
   name?: string;
+  kind?: BackupTaskKind;
   server_id?: string;
   remote_source: string;
   local_dir: string;
   part_name_prefix?: string;
+}
+
+export function taskKind(task: Pick<BackupTask, "kind">): BackupTaskKind {
+  return task.kind === "single" ? "single" : "multi";
+}
+
+export function isMultiTask(task: Pick<BackupTask, "kind">): boolean {
+  return taskKind(task) === "multi";
+}
+
+export function isSingleTask(task: Pick<BackupTask, "kind">): boolean {
+  return taskKind(task) === "single";
 }
 
 export interface SingleFileConfig {

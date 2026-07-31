@@ -195,6 +195,7 @@ function onServersChanged() {
         :connection="config"
         :servers="servers"
         :task="editingTask"
+        kind="multi"
         @saved="onTaskSaved"
       />
 

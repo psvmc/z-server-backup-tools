@@ -17,8 +17,13 @@ const {
   remotePickerOpen,
   saving,
   isEdit,
+  isMulti,
   serverOptions,
   connectionForPicker,
+  remotePickerMode,
+  remoteSourceLabel,
+  remotePickerTitle,
+  serverPlaceholder,
   openRemotePicker,
   pickLocalDir,
   openFolder,
@@ -42,7 +47,7 @@ const {
         <a-select
           v-model:value="form.server_id"
           :options="serverOptions"
-          placeholder="选择支持多文件备份的服务器"
+          :placeholder="serverPlaceholder"
           allow-clear
           show-search
           option-filter-prop="label"
@@ -51,7 +56,7 @@ const {
       <a-form-item label="任务名称（可选）">
         <a-input v-model:value="form.name" placeholder="便于识别的名称" allow-clear />
       </a-form-item>
-      <a-form-item label="远程源目录 (--dir)">
+      <a-form-item :label="remoteSourceLabel">
         <PathPickInput
           v-model="form.remote_source"
           editable
@@ -59,7 +64,7 @@ const {
           @browse="openRemotePicker"
         />
       </a-form-item>
-      <a-form-item label="文件名前缀">
+      <a-form-item v-if="isMulti" label="文件名前缀">
         <a-input
           v-model:value="form.part_name_prefix"
           placeholder="如 srv1-，压缩包将命名为 srv1-part-000001.zip"
@@ -81,7 +86,8 @@ const {
       v-model:open="remotePickerOpen"
       :connection="connectionForPicker"
       :initial-path="form.remote_source"
-      title="选择远程源目录"
+      :mode="remotePickerMode"
+      :title="remotePickerTitle"
       @select="(path) => (form.remote_source = path)"
     />
   </a-modal>
