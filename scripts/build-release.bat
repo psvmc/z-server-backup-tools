@@ -32,11 +32,12 @@ echo [ZServerBackup] Packaging NSIS installer...
 set INSTALL_SCOPE=user
 wails3 task package
 if errorlevel 1 exit /b 1
-echo [ZServerBackup] Building zipbak-srv.exe for remote server...
-wails3 task build:zipbak-srv
+echo [ZServerBackup] Building zipbak-srv for remote servers...
+wails3 task build:zipbak-srv-all
 if errorlevel 1 exit /b 1
 echo [ZServerBackup] Done. Output: dist\
 echo   Client: ZServerBackup.exe + *-installer.exe
-echo   Server: zipbak-srv.exe  ^(copy to remote app dir^)
+echo   Server: zipbak-srv.exe  ^(copy to remote Windows app dir^)
+echo           zipbak-srv      ^(copy to remote Linux app dir, chmod +x^)
 dir /b dist\*.exe 2>nul
 exit /b 0

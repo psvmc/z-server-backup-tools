@@ -19,10 +19,21 @@ tasks:
       - task: "{{OS}}:build"
 
   build:zipbak-srv:
-    summary: Builds zipbak-srv.exe for remote Windows server (GOOS=windows)
+    summary: Builds zipbak-srv.exe for remote Windows (GOOS=windows/amd64)
     cmds:
       - '{{if eq OS "windows"}}cmd /c if not exist {{.BIN_DIR}} mkdir {{.BIN_DIR}}{{else}}mkdir -p {{.BIN_DIR}}{{end}}'
       - GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "{{.BIN_DIR}}/zipbak-srv.exe" ./cmd/zipbak-srv
+
+  build:zipbak-srv-linux:
+    summary: Builds zipbak-srv for remote Linux (GOOS=linux/amd64)
+    cmds:
+      - '{{if eq OS "windows"}}cmd /c if not exist {{.BIN_DIR}} mkdir {{.BIN_DIR}}{{else}}mkdir -p {{.BIN_DIR}}{{end}}'
+      - GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "{{.BIN_DIR}}/zipbak-srv" ./cmd/zipbak-srv
+
+  build:zipbak-srv-all:
+    cmds:
+      - task: build:zipbak-srv
+      - task: build:zipbak-srv-linux
 
   package:
     summary: Packages a production build of the application

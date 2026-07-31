@@ -13,9 +13,10 @@ echo "[ZServerBackup] 打包安装程序..."
 export INSTALL_SCOPE=user
 wails3 task package
 
-echo "[ZServerBackup] 构建 zipbak-srv.exe（源机 Windows）..."
-wails3 task build:zipbak-srv
+echo "[ZServerBackup] 构建 zipbak-srv（Windows + Linux 源机）..."
+wails3 task build:zipbak-srv-all
 
 echo "[ZServerBackup] 构建完成，输出目录: dist/"
 echo "  客户端: ZServerBackup + 安装包"
-echo "  源机:   zipbak-srv.exe"
+echo "  源机:   zipbak-srv.exe  (Windows)"
+echo "          zipbak-srv      (Linux, chmod +x)"

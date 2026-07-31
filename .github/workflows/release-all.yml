@@ -84,7 +84,7 @@ jobs:
               exit 1
             fi
             wails3 task windows:package
-            wails3 task build:zipbak-srv
+            wails3 task build:zipbak-srv-all
             echo "=== dist/ contents ==="
             ls -la dist/ || true
             echo "======================"
@@ -103,6 +103,12 @@ jobs:
               cp -f dist/zipbak-srv.exe release/
             else
               echo "::error::zipbak-srv.exe not found in dist/"
+              exit 1
+            fi
+            if [ -f dist/zipbak-srv ]; then
+              cp -f dist/zipbak-srv release/
+            else
+              echo "::error::zipbak-srv (linux) not found in dist/"
               exit 1
             fi
           elif [ "${{ matrix.platform }}" = "linux" ]; then
