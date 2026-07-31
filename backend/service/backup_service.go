@@ -202,29 +202,32 @@ func (s *BackupService) GetTasks() []model.BackupTask {
 	return s.store.GetBackupTasks()
 }
 
-func (s *BackupService) SaveTasks(tasks []model.BackupTask) error {
-	if s.store == nil {
-		return fmt.Errorf("配置存储不可用")
+// validateBackupTask checks one task for SaveTasks.
+func validateBackupTask(servers []model.Server, t model.BackupTask) error {
+	t.ID = strings.TrimSpace(t.ID)
+	t.ServerID = strings.TrimSpace(t.ServerID)
+	t.RemoteSource = strings.TrimSpace(t.RemoteSource)
+	t.LocalDir = strings.TrimSpace(t.LocalDir)
+	if t.ID == "" {
+		return fmt.Errorf("任务 ID 不能为空")
 	}
-	normalized := make([]model.BackupTask, 0, len(tasks))
-	seen := make(map[string]struct{}, len(tasks))
-	for _, t := range tasks {
-		t.ID = strings.TrimSpace(t.ID)
-		t.Name = strings.TrimSpace(t.Name)
-		t.ServerID = strings.TrimSpace(t.ServerID)
-		t.RemoteSource = strings.TrimSpace(t.RemoteSource)
-		t.LocalDir = strings.TrimSpace(t.LocalDir)
-		t.PartNamePrefix = zipbak.SanitizePartPrefix(t.PartNamePrefix)
-		if t.ID == "" {
-			return fmt.Errorf("任务 ID 不能为空")
+	if t.ServerID == "" {
+		return fmt.Errorf("任务 %s 未选择服务器", t.DisplayName())
+	}
+	srv, err := findServer(servers, t.ServerID)
+	if err != nil {
+		return err
+	}
+	switch t.NormalizedKind() {
+	case "single":
+		if t.RemoteSource == "" {
+			return fmt.Errorf("任务 %s 的远程源文件不能为空", t.DisplayName())
 		}
-		if t.ServerID == "" {
-			return fmt.Errorf("任务 %s 未选择服务器", t.DisplayName())
+		if t.LocalDir == "" {
+			return fmt.Errorf("任务 %s 的本机保存目录不能为空", t.DisplayName())
 		}
-		srv, err := lookupServer(s.store, t.ServerID)
-		if err != nil {
-			return err
-		}
+		return nil
+	default:
 		if !srv.SupportMultiFile {
 			return fmt.Errorf("任务 %s 所选服务器不支持多文件备份", t.DisplayName())
 		}
@@ -234,13 +237,43 @@ func (s *BackupService) SaveTasks(tasks []model.BackupTask) error {
 		if t.LocalDir == "" {
 			return fmt.Errorf("任务 %s 的本机保存目录不能为空", t.DisplayName())
 		}
+		return nil
+	}
+}
+
+func (s *BackupService) SaveTasks(tasks []model.BackupTask) error {
+	if s.store == nil {
+		return fmt.Errorf("配置存储不可用")
+	}
+	servers := s.store.GetServers()
+	normalized := make([]model.BackupTask, 0, len(tasks))
+	seen := make(map[string]struct{}, len(tasks))
+	for _, t := range tasks {
+		t.ID = strings.TrimSpace(t.ID)
+		t.Name = strings.TrimSpace(t.Name)
+		t.ServerID = strings.TrimSpace(t.ServerID)
+		t.RemoteSource = strings.TrimSpace(t.RemoteSource)
+		t.LocalDir = strings.TrimSpace(t.LocalDir)
+		kind := t.NormalizedKind()
+		t.Kind = kind
+		if kind == "single" {
+			t.PartNamePrefix = ""
+		} else {
+			t.PartNamePrefix = zipbak.SanitizePartPrefix(t.PartNamePrefix)
+		}
+		if err := validateBackupTask(servers, t); err != nil {
+			return err
+		}
 		if _, ok := seen[t.ID]; ok {
 			return fmt.Errorf("任务 ID 重复: %s", t.ID)
 		}
 		seen[t.ID] = struct{}{}
 		normalized = append(normalized, t)
 	}
-	return s.store.SetBackupTasks(normalized)
+	if err := s.store.SetBackupTasks(normalized); err != nil {
+		return err
+	}
+	return s.reconcileActiveIDs(normalized)
 }
 
 func (s *BackupService) GetActiveTaskID() string {
@@ -260,10 +293,90 @@ func (s *BackupService) SetActiveTaskID(taskID string) error {
 	}
 	for _, t := range s.store.GetBackupTasks() {
 		if t.ID == taskID {
+			if t.NormalizedKind() != "multi" {
+				return fmt.Errorf("任务 %s 不是多文件备份任务", t.DisplayName())
+			}
 			return s.store.SetActiveTaskID(taskID)
 		}
 	}
 	return fmt.Errorf("任务不存在: %s", taskID)
+}
+
+func (s *BackupService) GetActiveSingleFileTaskID() string {
+	if s.store == nil {
+		return ""
+	}
+	return s.store.GetActiveSingleFileTaskID()
+}
+
+func (s *BackupService) SetActiveSingleFileTaskID(taskID string) error {
+	if s.store == nil {
+		return fmt.Errorf("配置存储不可用")
+	}
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return s.store.SetActiveSingleFileTaskID("")
+	}
+	for _, t := range s.store.GetBackupTasks() {
+		if t.ID == taskID {
+			if t.NormalizedKind() != "single" {
+				return fmt.Errorf("任务 %s 不是单文件备份任务", t.DisplayName())
+			}
+			return s.store.SetActiveSingleFileTaskID(taskID)
+		}
+	}
+	return fmt.Errorf("任务不存在: %s", taskID)
+}
+
+func (s *BackupService) reconcileActiveIDs(tasks []model.BackupTask) error {
+	if s.store == nil {
+		return nil
+	}
+	activeMulti := s.store.GetActiveTaskID()
+	if activeMulti != "" {
+		valid := false
+		for _, t := range tasks {
+			if t.ID == activeMulti && t.NormalizedKind() == "multi" {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			replacement := ""
+			for _, t := range tasks {
+				if t.NormalizedKind() == "multi" {
+					replacement = t.ID
+					break
+				}
+			}
+			if err := s.store.SetActiveTaskID(replacement); err != nil {
+				return err
+			}
+		}
+	}
+	activeSingle := s.store.GetActiveSingleFileTaskID()
+	if activeSingle != "" {
+		valid := false
+		for _, t := range tasks {
+			if t.ID == activeSingle && t.NormalizedKind() == "single" {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			replacement := ""
+			for _, t := range tasks {
+				if t.NormalizedKind() == "single" {
+					replacement = t.ID
+					break
+				}
+			}
+			if err := s.store.SetActiveSingleFileTaskID(replacement); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (s *BackupService) activeTaskMerged() model.BackupConfig {

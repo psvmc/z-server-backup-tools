@@ -60,7 +60,7 @@ func NewStore() (*Store, error) {
 	if err := os.MkdirAll(appDir, 0o755); err != nil {
 		return nil, err
 	}
-	store := &Store{filePath: filepath.Join(appDir, "config.json")}
+	store := NewStoreAt(filepath.Join(appDir, "config.json"))
 	if err := store.load(); err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
@@ -71,6 +71,11 @@ func NewStore() (*Store, error) {
 		store.Backup.MaxPartGB = 2
 	}
 	return store, nil
+}
+
+// NewStoreAt returns a store backed by the given config file path.
+func NewStoreAt(filePath string) *Store {
+	return &Store{filePath: filePath}
 }
 
 func (s *Store) load() error {

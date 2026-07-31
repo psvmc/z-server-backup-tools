@@ -62,20 +62,24 @@ func mergeServerTaskNotify(notify model.BackupConfig, srv model.Server, task mod
 	return task.MergeInto(srv.ApplyTo(notify)).Resolved()
 }
 
-func lookupServer(store *config.Store, id string) (model.Server, error) {
+func findServer(servers []model.Server, id string) (model.Server, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
 		return model.Server{}, fmt.Errorf("请选择服务器")
 	}
-	if store == nil {
-		return model.Server{}, fmt.Errorf("配置存储不可用")
-	}
-	for _, srv := range store.GetServers() {
+	for _, srv := range servers {
 		if srv.ID == id {
 			return srv, nil
 		}
 	}
 	return model.Server{}, fmt.Errorf("服务器不存在: %s", id)
+}
+
+func lookupServer(store *config.Store, id string) (model.Server, error) {
+	if store == nil {
+		return model.Server{}, fmt.Errorf("配置存储不可用")
+	}
+	return findServer(store.GetServers(), id)
 }
 
 func normalizeServer(srv model.Server) (model.Server, error) {
