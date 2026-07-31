@@ -158,7 +158,7 @@ func (s *SingleFileBackupService) runDownload(ctx context.Context, cfg model.Bac
 		s.mu.Unlock()
 	}()
 
-	remotePath := util.NormalizeRemotePath(remoteFile)
+	remotePath := util.NormalizeRemotePathForOS(remoteFile, cfg.OSType)
 	s.appendLog(fmt.Sprintf("开始下载：%s → %s", remotePath, localPath))
 
 	sc, err := sftpclient.Dial(cfg)
