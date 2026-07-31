@@ -1,19 +1,13 @@
 import { onMounted, onUnmounted, ref, watch, type Ref } from "vue";
 import { message } from "ant-design-vue";
 import { Events } from "@wailsio/runtime";
-import { SingleFileBackupService } from "../../bindings/z-server-backup-tools/backend/service";
 import {
-  BackupConfig as BackupConfigBinding,
-  SingleFileConfig as SingleFileConfigBinding,
-} from "../../bindings/z-server-backup-tools/backend/model/models";
-import type { BackupConfig, JobStatus, SingleFileConfig } from "../types/backup";
+  BackupService,
+  SingleFileBackupService,
+} from "../../bindings/z-server-backup-tools/backend/service";
+import type { BackupTask, JobStatus } from "../types/backup";
+import { isSingleTask } from "../types/backup";
 import { formatError } from "../types/update";
-
-const defaultPaths = (): SingleFileConfig => ({
-  server_id: "",
-  remote_file: "",
-  local_dir: "",
-});
 
 const defaultStatus = (): JobStatus => ({
   running: false,
@@ -27,28 +21,16 @@ const defaultStatus = (): JobStatus => ({
   remoteInited: false,
 });
 
-function toBindingPaths(cfg: SingleFileConfig) {
-  return SingleFileConfigBinding.createFrom(JSON.parse(JSON.stringify(cfg)));
-}
-
-function toBindingSSH(cfg: BackupConfig) {
-  return BackupConfigBinding.createFrom(JSON.parse(JSON.stringify(cfg)));
-}
-
-function bindingToPlainPaths(cfg: SingleFileConfigBinding): SingleFileConfig {
-  return JSON.parse(JSON.stringify(cfg)) as SingleFileConfig;
-}
-
 function eventText(ev: unknown): string {
   if (typeof ev === "string") return ev;
   return String((ev as { data?: string })?.data ?? "");
 }
 
 /** Shared across App + SingleFileBackupPanel so status/events are not duplicated. */
-const paths = ref<SingleFileConfig>(defaultPaths());
+const tasks = ref<BackupTask[]>([]);
+const activeTaskId = ref("");
 const status = ref<JobStatus>(defaultStatus());
 const logs = ref<string[]>([]);
-const saving = ref(false);
 const panelActive = ref(true);
 
 let started = false;
@@ -61,31 +43,50 @@ const refreshLocal = async () => {
   logs.value = (await SingleFileBackupService.GetLogs()) as string[];
 };
 
-const load = async () => {
-  const stored = SingleFileConfigBinding.createFrom(await SingleFileBackupService.GetConfig());
-  paths.value = { ...defaultPaths(), ...bindingToPlainPaths(stored) };
-  await refreshLocal();
-};
-
-const savePaths = async (payload?: SingleFileConfig): Promise<boolean> => {
-  const toSave = { ...defaultPaths(), ...(payload ?? paths.value) };
-  saving.value = true;
-  try {
-    await SingleFileBackupService.SaveConfig(toBindingPaths(toSave));
-    paths.value = toSave;
-    message.success("单文件路径已保存");
-    return true;
-  } catch (err) {
-    message.error(formatError(err));
-    return false;
-  } finally {
-    saving.value = false;
+const loadTasks = async () => {
+  const all = (await BackupService.GetTasks()) as BackupTask[];
+  tasks.value = all.filter(isSingleTask);
+  activeTaskId.value = await BackupService.GetActiveSingleFileTaskID();
+  if (!activeTaskId.value && tasks.value.length > 0) {
+    activeTaskId.value = tasks.value[0].id;
+    await BackupService.SetActiveSingleFileTaskID(activeTaskId.value);
   }
 };
 
-const start = async (sshCfg: BackupConfig) => {
+const selectTask = async (taskId: string) => {
   try {
-    await SingleFileBackupService.StartDownload(toBindingSSH(sshCfg), toBindingPaths(paths.value));
+    await BackupService.SetActiveSingleFileTaskID(taskId);
+    activeTaskId.value = taskId;
+    await refreshLocal();
+  } catch (err) {
+    message.error(formatError(err));
+  }
+};
+
+const removeTask = async (task: BackupTask) => {
+  const hide = message.loading("删除任务中...", 0);
+  try {
+    const current = (await BackupService.GetTasks()) as BackupTask[];
+    const next = current.filter((t) => t.id !== task.id);
+    await BackupService.SaveTasks(next);
+    if (activeTaskId.value === task.id) {
+      const remainingSingle = next.filter(isSingleTask);
+      activeTaskId.value = remainingSingle[0]?.id ?? "";
+      await BackupService.SetActiveSingleFileTaskID(activeTaskId.value);
+    }
+    await loadTasks();
+    await refreshLocal();
+    hide();
+    message.success("任务已删除");
+  } catch (err) {
+    hide();
+    message.error(formatError(err));
+  }
+};
+
+const start = async () => {
+  try {
+    await SingleFileBackupService.StartDownload();
     message.success("单文件下载已启动");
     await refreshLocal();
   } catch (err) {
@@ -101,9 +102,11 @@ const stop = () => {
 function startLifecycle() {
   if (started) return;
   started = true;
-  void load().catch((err) => {
-    console.warn("加载单文件配置失败:", err);
-  });
+  void loadTasks()
+    .then(() => refreshLocal())
+    .catch((err) => {
+      console.warn("加载单文件任务失败:", err);
+    });
   unsubs.push(
     Events.On("singlefile-log", (ev) => {
       const line = eventText(ev);
@@ -167,5 +170,15 @@ export function useSingleFileBackup(options?: { panelActive?: Ref<boolean> }) {
     }
   });
 
-  return { paths, status, logs, saving, load, savePaths, start, stop };
+  return {
+    tasks,
+    activeTaskId,
+    status,
+    logs,
+    loadTasks,
+    selectTask,
+    removeTask,
+    start,
+    stop,
+  };
 }

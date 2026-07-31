@@ -1,37 +1,16 @@
 <script setup lang="ts">
-import { computed } from "vue";
 import type { BackupTask } from "../types/backup";
-import { taskDisplayName } from "../types/backup";
+import { backupTaskListProps, useBackupTaskList } from "./BackupTaskList";
 
-const props = defineProps<{
-  tasks: BackupTask[];
-  activeTaskId: string;
-  disabled?: boolean;
-}>();
-
-const emit = defineEmits<{
+const props = defineProps(backupTaskListProps);
+defineEmits<{
   select: [id: string];
   add: [];
   edit: [task: BackupTask];
   remove: [task: BackupTask];
 }>();
 
-const columns = [
-  { title: "任务", dataIndex: "name", key: "name", width: 100, ellipsis: true },
-  { title: "远程源目录", dataIndex: "remote_source", key: "remote_source", width: 280, ellipsis: true },
-  { title: "本机目录", dataIndex: "local_dir", key: "local_dir", ellipsis: true },
-  { title: "前缀", dataIndex: "part_name_prefix", key: "part_name_prefix", width: 100, ellipsis: true },
-  { title: "操作", key: "actions", width: 160 },
-];
-
-const rows = computed(() =>
-  props.tasks.map((task) => ({
-    ...task,
-    key: task.id,
-    name: taskDisplayName(task),
-    part_name_prefix: task.part_name_prefix?.trim() || "-",
-  })),
-);
+const { columns, rows } = useBackupTaskList(props);
 </script>
 
 <template>

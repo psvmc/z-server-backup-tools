@@ -1,23 +1,11 @@
-import { computed, nextTick, ref, watch, type PropType } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
 import { message } from "ant-design-vue";
-import { Dialogs } from "@wailsio/runtime";
-import { BackupService } from "../../bindings/z-server-backup-tools/backend/service";
-import type { BackupConfig, Server } from "../types/backup";
-import { applyServer, emptyNotifyConfig } from "../types/backup";
-import { formatError } from "../types/update";
+import type { BackupTask } from "../types/backup";
 import { formatSpeed } from "../utils/backupUi";
 import { formatBytes } from "../utils/size";
 import { useSingleFileBackup } from "../composables/useSingleFileBackup";
 
 export const singleFileBackupPanelProps = {
-  sshConfig: {
-    type: Object as PropType<BackupConfig>,
-    required: true as const,
-  },
-  servers: {
-    type: Array as PropType<Server[]>,
-    default: () => [],
-  },
   disabledByOtherJob: {
     type: Boolean,
     default: false,
@@ -29,42 +17,31 @@ export const singleFileBackupPanelProps = {
 };
 
 export type SingleFileBackupPanelProps = {
-  sshConfig: BackupConfig;
-  servers?: Server[];
   disabledByOtherJob?: boolean;
   panelActive?: boolean;
 };
 
-function isDialogCancelled(err: unknown): boolean {
-  const text = formatError(err).toLowerCase();
-  return (
-    text.includes("cancel") ||
-    text.includes("cancelled") ||
-    text.includes("canceled") ||
-    text.includes("abort") ||
-    text.includes("取消")
-  );
-}
+export type SingleFileBackupPanelEmit = {
+  (e: "addTask"): void;
+  (e: "editTask", task: BackupTask): void;
+};
 
-export function useSingleFileBackupPanel(props: SingleFileBackupPanelProps) {
+export function useSingleFileBackupPanel(
+  props: SingleFileBackupPanelProps,
+  emit: SingleFileBackupPanelEmit,
+) {
   const panelActive = computed(() => props.panelActive !== false);
-  const { paths, status, logs, saving, savePaths, start, stop } = useSingleFileBackup({
-    panelActive,
-  });
+  const { tasks, activeTaskId, status, logs, selectTask, removeTask, start, stop } =
+    useSingleFileBackup({
+      panelActive,
+    });
 
   const autoScrollLog = ref(false);
   const logBoxRef = ref<HTMLElement | null>(null);
   const prevLogLen = ref(0);
 
-  const serverOptions = computed(() =>
-    (props.servers ?? []).map((s) => ({
-      value: s.id,
-      label: s.name?.trim() || s.host || s.id,
-    })),
-  );
-
-  const selectedServer = computed(
-    () => (props.servers ?? []).find((s) => s.id === paths.value.server_id) ?? null,
+  const activeTask = computed(
+    () => tasks.value.find((t) => t.id === activeTaskId.value) ?? null,
   );
 
   const progressPercent = computed(() => {
@@ -106,9 +83,10 @@ export function useSingleFileBackupPanel(props: SingleFileBackupPanelProps) {
     () =>
       !!props.disabledByOtherJob ||
       status.value.running ||
-      !paths.value.server_id?.trim() ||
-      !paths.value.remote_file?.trim() ||
-      !paths.value.local_dir?.trim(),
+      !activeTaskId.value?.trim() ||
+      !activeTask.value?.server_id?.trim() ||
+      !activeTask.value?.remote_source?.trim() ||
+      !activeTask.value?.local_dir?.trim(),
   );
 
   const stopDisabled = computed(() => !status.value.running);
@@ -141,81 +119,36 @@ export function useSingleFileBackupPanel(props: SingleFileBackupPanelProps) {
     }
   });
 
-  function onRemoteBrowse() {
-    message.info("请手动输入远程文件完整路径");
-  }
-
-  async function pickLocalDir() {
-    try {
-      const picked = await Dialogs.OpenFile({
-        Title: "选择本机保存目录",
-        CanChooseDirectories: true,
-        CanChooseFiles: false,
-        Directory: paths.value.local_dir || undefined,
-      });
-      const path = Array.isArray(picked) ? picked[0] : picked;
-      if (path && typeof path === "string") {
-        paths.value.local_dir = path;
-      }
-    } catch (err) {
-      if (isDialogCancelled(err)) return;
-      message.error(formatError(err));
-    }
-  }
-
-  async function openLocalFolder() {
-    const target = paths.value.local_dir?.trim();
-    if (!target) {
-      message.warning("请先填写本机保存目录");
-      return;
-    }
-    try {
-      await BackupService.OpenInExplorer(target);
-    } catch (err) {
-      message.error(formatError(err));
-    }
-  }
-
-  async function onSave() {
-    if (!paths.value.server_id?.trim()) {
-      message.warning("请选择服务器");
-      return;
-    }
-    if (!paths.value.remote_file?.trim()) {
-      message.warning("请填写远程源文件路径");
-      return;
-    }
-    if (!paths.value.local_dir?.trim()) {
-      message.warning("请填写本机保存目录");
-      return;
-    }
-    await savePaths();
-  }
-
   async function onStart() {
     if (props.disabledByOtherJob) {
       message.warning("已有多文件备份任务在运行");
       return;
     }
-    if (!paths.value.server_id?.trim()) {
-      message.warning("请选择服务器");
+    if (!activeTaskId.value?.trim()) {
+      message.warning("请先添加并选择单文件任务");
       return;
     }
-    if (!paths.value.remote_file?.trim()) {
-      message.warning("请填写远程源文件路径");
+    if (
+      !activeTask.value?.server_id?.trim() ||
+      !activeTask.value?.remote_source?.trim() ||
+      !activeTask.value?.local_dir?.trim()
+    ) {
+      message.warning("当前任务配置不完整，请编辑后重试");
       return;
     }
-    if (!paths.value.local_dir?.trim()) {
-      message.warning("请填写本机保存目录");
-      return;
-    }
-    // 后端以 store 的 server_id 为准；此处合并所选服务器 SSH 作为入参兜底
-    const ssh = applyServer(props.sshConfig ?? emptyNotifyConfig(), selectedServer.value);
-    await start(ssh);
+    await start();
   }
 
   function onStop() {
     stop();
+  }
+
+  function onAddTask() {
+    emit("addTask");
+  }
+
+  function onEditTask(task: BackupTask) {
+    emit("editTask", task);
   }
 
   function progressFormat(pct?: number) {
@@ -225,13 +158,11 @@ export function useSingleFileBackupPanel(props: SingleFileBackupPanelProps) {
   }
 
   return {
-    paths,
+    tasks,
+    activeTaskId,
     status,
-    logs,
-    saving,
     autoScrollLog,
     logBoxRef,
-    serverOptions,
     progressPercent,
     progressText,
     progressFormat,
@@ -240,10 +171,10 @@ export function useSingleFileBackupPanel(props: SingleFileBackupPanelProps) {
     logText,
     startDisabled,
     stopDisabled,
-    onRemoteBrowse,
-    pickLocalDir,
-    openLocalFolder,
-    onSave,
+    selectTask,
+    removeTask,
+    onAddTask,
+    onEditTask,
     onStart,
     onStop,
   };

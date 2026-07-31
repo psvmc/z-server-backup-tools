@@ -1,15 +1,20 @@
 <script setup lang="ts">
-import PathPickInput from "./PathPickInput.vue";
+import type { BackupTask } from "../types/backup";
+import BackupTaskList from "./BackupTaskList.vue";
 import { singleFileBackupPanelProps, useSingleFileBackupPanel } from "./SingleFileBackupPanel";
 
 const props = defineProps(singleFileBackupPanelProps);
+const emit = defineEmits<{
+  addTask: [];
+  editTask: [task: BackupTask];
+}>();
+
 const {
-  paths,
+  tasks,
+  activeTaskId,
   status,
-  saving,
   autoScrollLog,
   logBoxRef,
-  serverOptions,
   progressPercent,
   progressText,
   progressFormat,
@@ -18,13 +23,13 @@ const {
   logText,
   startDisabled,
   stopDisabled,
-  onRemoteBrowse,
-  pickLocalDir,
-  openLocalFolder,
-  onSave,
+  selectTask,
+  removeTask,
+  onAddTask,
+  onEditTask,
   onStart,
   onStop,
-} = useSingleFileBackupPanel(props);
+} = useSingleFileBackupPanel(props, emit);
 </script>
 
 <template>
@@ -35,37 +40,18 @@ const {
       </div>
 
       <div class="panel-card-body single-file-backup-panel__body">
-        <div class="single-file-backup-panel__main">
-          <a-form layout="vertical" size="small" class="single-file-backup-panel__form">
-            <a-form-item label="服务器" required>
-              <a-select
-                v-model:value="paths.server_id"
-                :options="serverOptions"
-                placeholder="选择服务器"
-                allow-clear
-                show-search
-                option-filter-prop="label"
-                :disabled="status.running"
-              />
-            </a-form-item>
-            <a-form-item label="远程源文件">
-              <PathPickInput
-                v-model="paths.remote_file"
-                editable
-                placeholder="D:\data\app.bak"
-                @browse="onRemoteBrowse"
-              />
-            </a-form-item>
-            <a-form-item label="本机保存目录">
-              <PathPickInput
-                v-model="paths.local_dir"
-                show-open-folder
-                @browse="pickLocalDir"
-                @open-folder="openLocalFolder"
-              />
-            </a-form-item>
-          </a-form>
+        <BackupTaskList
+          variant="single"
+          :tasks="tasks"
+          :active-task-id="activeTaskId"
+          :disabled="status.running"
+          @add="onAddTask"
+          @edit="onEditTask"
+          @select="selectTask"
+          @remove="removeTask"
+        />
 
+        <div class="single-file-backup-panel__main">
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div class="rounded-lg border border-emerald-100/80 bg-white/60 px-3 py-2">
               <div class="text-xs text-gray-500 mb-1">状态</div>
@@ -93,9 +79,6 @@ const {
           />
 
           <div class="flex flex-wrap gap-2 items-center">
-            <a-button type="default" :loading="saving" :disabled="status.running" @click="onSave">
-              保存路径
-            </a-button>
             <a-button type="primary" :disabled="startDisabled" @click="onStart">开始下载</a-button>
             <a-button danger :disabled="stopDisabled" @click="onStop">停止</a-button>
             <div class="backup-toolbar-trailing">
@@ -154,17 +137,5 @@ const {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.single-file-backup-panel__form {
-  margin-bottom: 0;
-}
-
-.single-file-backup-panel__form :deep(.ant-form-item) {
-  margin-bottom: 12px;
-}
-
-.single-file-backup-panel__form :deep(.ant-form-item:last-child) {
-  margin-bottom: 0;
 }
 </style>

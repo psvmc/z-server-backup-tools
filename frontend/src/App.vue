@@ -18,12 +18,13 @@ import { useAppMainTabs, useJobExclusion } from "./AppTabs";
 import { downloadPhaseLabel } from "./utils/backupUi";
 import { mergeJobConfig } from "./types/backup";
 
-import type { BackupConfig, BackupTask } from "./types/backup";
+import type { BackupConfig, BackupTask, BackupTaskKind } from "./types/backup";
 
 const appTitle = ref("服务器文件备份");
 const settingsOpen = ref(false);
 const serversOpen = ref(false);
 const taskFormOpen = ref(false);
+const taskFormKind = ref<BackupTaskKind>("multi");
 const editingTask = ref<BackupTask | null>(null);
 const { checkOnStartup, checkForUpdate, loadCurrentVersion } = useAppUpdate();
 const { updateProgress } = useUpdateProgress();
@@ -109,22 +110,38 @@ async function onSaveNotify(cfg: BackupConfig) {
 }
 
 function openAddTask() {
+  taskFormKind.value = "multi";
   editingTask.value = null;
   taskFormOpen.value = true;
 }
 
 function openEditTask(task: BackupTask) {
+  taskFormKind.value = "multi";
+  editingTask.value = task;
+  taskFormOpen.value = true;
+}
+
+function openAddSingleTask() {
+  taskFormKind.value = "single";
+  editingTask.value = null;
+  taskFormOpen.value = true;
+}
+
+function openEditSingleTask(task: BackupTask) {
+  taskFormKind.value = "single";
   editingTask.value = task;
   taskFormOpen.value = true;
 }
 
 async function onTaskSaved() {
   await loadTasks();
+  await single.loadTasks();
   await refreshStatus();
 }
 
 function onServersChanged() {
   void loadServers();
+  void single.loadTasks();
 }
 </script>
 
@@ -171,10 +188,10 @@ function onServersChanged() {
           </a-tab-pane>
           <a-tab-pane key="single" tab="单文件备份" :disabled="multiRunning">
             <SingleFileBackupPanel
-              :ssh-config="config"
-              :servers="servers"
               :disabled-by-other-job="multiRunning"
               :panel-active="singlePanelActive"
+              @add-task="openAddSingleTask"
+              @edit-task="openEditSingleTask"
             />
           </a-tab-pane>
         </a-tabs>
@@ -195,7 +212,7 @@ function onServersChanged() {
         :connection="config"
         :servers="servers"
         :task="editingTask"
-        kind="multi"
+        :kind="taskFormKind"
         @saved="onTaskSaved"
       />
 
