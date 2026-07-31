@@ -152,8 +152,6 @@ export function useSingleFileBackupPanel(
   }
 
   function progressFormat(pct?: number) {
-    const speed = formatSpeed(status.value.downloadSpeedBps ?? 0);
-    if (speed) return speed;
     return `${pct ?? progressPercent.value}%`;
   }
 

@@ -72,8 +72,8 @@ const {
           </div>
 
           <a-progress
+            class="panel-progress"
             :percent="progressPercent"
-            size="small"
             :status="status.running ? 'active' : undefined"
             :format="progressFormat"
           />

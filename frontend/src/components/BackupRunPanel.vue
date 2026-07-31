@@ -189,7 +189,7 @@ watch(autoScrollLog, (on) => {
               class="text-xs"
             />
 
-            <a-progress :percent="progressPercent" size="small" status="active" />
+            <a-progress class="panel-progress" :percent="progressPercent" status="active" />
 
             <div class="flex flex-wrap gap-2 items-center">
               <a-button type="primary" :disabled="status.running || !hasActiveTask" @click="$emit('start')">{{ startBackupLabel }}</a-button>

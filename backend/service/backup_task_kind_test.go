@@ -42,6 +42,23 @@ func TestValidateBackupTask_SingleVsMulti(t *testing.T) {
 	}
 }
 
+func TestSaveTasks_AllowsLegacyTaskWithoutServer(t *testing.T) {
+	store := testStore(t)
+	store.Servers = []model.Server{{ID: "s1", Name: "a", Host: "h", User: "u", Port: 22, SupportMultiFile: false}}
+	svc := &BackupService{store: store}
+	tasks := []model.BackupTask{
+		{ID: "default", Name: "默认任务", RemoteSource: `D:\data`, LocalDir: `C:\backup`},
+		{ID: "sf1", Kind: "single", ServerID: "s1", RemoteSource: `/a.bak`, LocalDir: `C:\out`},
+	}
+	if err := svc.SaveTasks(tasks); err != nil {
+		t.Fatal(err)
+	}
+	saved := store.GetBackupTasks()
+	if len(saved) != 2 {
+		t.Fatalf("got %d tasks", len(saved))
+	}
+}
+
 func TestSaveTasks_SingleAllowedOnNonMultiServer(t *testing.T) {
 	store := testStore(t)
 	store.Servers = []model.Server{{ID: "s1", Name: "a", Host: "h", User: "u", Port: 22, SupportMultiFile: false}}

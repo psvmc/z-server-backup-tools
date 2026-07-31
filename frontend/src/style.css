@@ -27,6 +27,14 @@ body {
   overflow: hidden;
 }
 
+/* 可点击控件禁止选中文字 */
+.ant-btn,
+.ant-tabs-tab,
+.app-version-btn {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .app-shell {
   width: 100%;
   height: 100%;
@@ -73,7 +81,7 @@ body {
   min-height: 0;
   width: 100%;
   box-sizing: border-box;
-  padding: 16px;
+  padding: 4px 16px 16px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -301,4 +309,44 @@ body {
   overflow: hidden;
   padding-top: 12px;
   padding-bottom: 12px;
+}
+
+/* 多文件 / 单文件进度条：百分比字号与对齐一致 */
+.panel-progress {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  width: 100%;
+  max-width: 100%;
+  line-height: 1;
+}
+
+.panel-progress .ant-progress-outer,
+.panel-progress .ant-progress-inner {
+  display: flex;
+  align-items: center;
+}
+
+.panel-progress .ant-progress-outer {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto !important;
+  margin-inline-end: 0 !important;
+  padding-inline-end: 0 !important;
+}
+
+.panel-progress .ant-progress-text {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  width: auto !important;
+  margin-inline-start: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  overflow: visible;
+  white-space: nowrap;
+  word-break: keep-all;
+  text-align: right;
 }

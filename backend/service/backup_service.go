@@ -203,6 +203,8 @@ func (s *BackupService) GetTasks() []model.BackupTask {
 }
 
 // validateBackupTask checks one task for SaveTasks.
+// Tasks with empty server_id are allowed to persist (legacy / incomplete, e.g.「默认任务」);
+// start paths still require a server. Full-list SaveTasks must not fail because of siblings.
 func validateBackupTask(servers []model.Server, t model.BackupTask) error {
 	t.ID = strings.TrimSpace(t.ID)
 	t.ServerID = strings.TrimSpace(t.ServerID)
@@ -212,7 +214,7 @@ func validateBackupTask(servers []model.Server, t model.BackupTask) error {
 		return fmt.Errorf("任务 ID 不能为空")
 	}
 	if t.ServerID == "" {
-		return fmt.Errorf("任务 %s 未选择服务器", t.DisplayName())
+		return nil
 	}
 	srv, err := findServer(servers, t.ServerID)
 	if err != nil {
