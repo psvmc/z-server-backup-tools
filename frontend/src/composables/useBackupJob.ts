@@ -109,8 +109,16 @@ export function useBackupJob() {
   };
 
   const loadConfig = async () => {
-    const stored = BackupConfigBinding.createFrom(await BackupService.GetConfig());
-    config.value = { ...emptyNotifyConfig(), ...bindingToPlain(stored) };
+    const stored = bindingToPlain(BackupConfigBinding.createFrom(await BackupService.GetConfig()));
+    // 全局 backup 仅保留邮件；残留 SSH/远程应用不暴露给 UI，也不进入服务器列表
+    config.value = {
+      ...emptyNotifyConfig(),
+      notify_email: stored.notify_email,
+      smtp_host: stored.smtp_host,
+      smtp_port: stored.smtp_port,
+      smtp_user: stored.smtp_user,
+      smtp_password: stored.smtp_password,
+    };
     configPath.value = await BackupService.GetConfigPath();
     await loadServers();
     await loadTasks();
@@ -179,7 +187,7 @@ export function useBackupJob() {
     try {
       await BackupService.SaveNotifyConfig(toBindingConfig(toSave));
       config.value = {
-        ...config.value,
+        ...emptyNotifyConfig(),
         notify_email: toSave.notify_email,
         smtp_host: toSave.smtp_host,
         smtp_port: toSave.smtp_port,
