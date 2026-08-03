@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"z-server-backup-tools/backend/model"
 )
 
-func TestStoreSaveBackupRoundTrip(t *testing.T) {
+func TestStoreSaveBackupNotifyOnly(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 
@@ -23,6 +24,11 @@ func TestStoreSaveBackupRoundTrip(t *testing.T) {
 		RemoteSource: "D:/data",
 		LocalDir:     "C:/backup",
 		MaxPartGB:    2,
+		NotifyEmail:  "a@b.c",
+		SmtpHost:     "smtp.qq.com",
+		SmtpPort:     465,
+		SmtpUser:     "user",
+		SmtpPassword: "pass",
 	}
 	if err := s.save(); err != nil {
 		t.Fatal(err)
@@ -32,20 +38,59 @@ func TestStoreSaveBackupRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if strings.Contains(string(data), `"host"`) || strings.Contains(string(data), `"remote_source"`) {
+		t.Fatalf("backup should only persist notify fields, got:\n%s", data)
+	}
 	var payload diskConfig
 	if err := json.Unmarshal(data, &payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload.Backup.Host != "192.168.1.1" || payload.Backup.User != "admin" {
-		t.Fatalf("unexpected backup: %+v", payload.Backup)
+	if payload.Backup.NotifyEmail != "a@b.c" || payload.Backup.SmtpHost != "smtp.qq.com" || payload.Backup.SmtpPort != 465 {
+		t.Fatalf("unexpected notify backup: %+v", payload.Backup)
 	}
 
 	s2 := &Store{filePath: path}
 	if err := s2.load(); err != nil {
 		t.Fatal(err)
 	}
-	if s2.Backup.Password != "secret" {
-		t.Fatalf("password not loaded: %q", s2.Backup.Password)
+	if s2.Backup.Password != "" || s2.Backup.Host != "" {
+		t.Fatalf("loaded backup should be notify-only: %+v", s2.Backup)
+	}
+	if s2.Backup.SmtpPassword != "pass" {
+		t.Fatalf("password not loaded: %q", s2.Backup.SmtpPassword)
+	}
+}
+
+func TestStoreLoadStripsLegacyBackupFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	raw := `{"backup":{"host":"1.1.1.1","port":22,"user":"u","notify_email":"a@b.c","smtp_host":"smtp.qq.com","smtp_port":465}}`
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := &Store{filePath: path}
+	if err := s.load(); err != nil {
+		t.Fatal(err)
+	}
+	if s.Backup.Host != "" || s.Backup.Port != 0 {
+		t.Fatalf("expected stripped backup, got %+v", s.Backup)
+	}
+	if s.Backup.NotifyEmail != "a@b.c" {
+		t.Fatalf("notify fields lost: %+v", s.Backup)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), `"host"`) {
+		t.Fatalf("config file should be rewritten without legacy fields:\n%s", data)
+	}
+	var payload diskConfig
+	if err := json.Unmarshal(data, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Backup.NotifyEmail != "a@b.c" {
+		t.Fatalf("notify fields lost: %+v", payload.Backup)
 	}
 }
 

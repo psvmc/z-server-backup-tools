@@ -54,7 +54,7 @@ const {
   >
     <div class="remote-dir-picker">
       <div class="flex flex-wrap items-center gap-2 text-xs text-gray-600 shrink-0">
-        <span class="font-medium text-emerald-900">当前：</span>
+        <span class="font-medium text-blue-900">当前：</span>
         <span class="break-all">{{ currentLabel }}</span>
       </div>
 
@@ -156,7 +156,7 @@ const {
   width: 100%;
   padding: 8px 12px;
   border: none;
-  border-bottom: 1px solid #eaf3ef;
+  border-bottom: 1px solid var(--app-border-light);
   background: transparent;
   text-align: left;
   cursor: pointer;

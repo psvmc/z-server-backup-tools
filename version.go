@@ -1,10 +1,11 @@
 package main
 
 const (
-	AppName    = "ZServerBackup"
-	AppVersion = "1.0.5"
+	AppName        = "ZServerBackup"
+	AppDisplayName = "服务器文件备份"
+	AppVersion = "1.0.6"
 )
 
 func AppTitle() string {
-	return AppName + " v" + AppVersion
+	return AppDisplayName + " v" + AppVersion
 }

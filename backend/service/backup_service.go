@@ -101,20 +101,7 @@ func (s *BackupService) SaveNotifyConfig(cfg model.BackupConfig) error {
 	if s.store == nil {
 		return fmt.Errorf("配置存储不可用")
 	}
-	stored := s.storedConfig()
-	stored.NotifyEmail = strings.TrimSpace(cfg.NotifyEmail)
-	stored.SmtpHost = strings.TrimSpace(cfg.SmtpHost)
-	stored.SmtpPort = cfg.SmtpPort
-	stored.SmtpUser = strings.TrimSpace(cfg.SmtpUser)
-	stored.SmtpPassword = cfg.SmtpPassword
-	// 剥离全局 SSH/远程应用，避免 UI 误用残留连接字段
-	stored.Host, stored.User, stored.Password, stored.RemoteAppDir = "", "", "", ""
-	stored.Port = 22
-	stored.MaxPartGB = 0
-	stored.RemoteSrv = ""
-	stored.RemoteState = ""
-	stored.RemoteStaging = ""
-	return s.store.SetBackupConfig(stored)
+	return s.store.SetBackupConfig(cfg.NotifyOnly())
 }
 
 func (s *BackupService) GetServers() []model.Server {

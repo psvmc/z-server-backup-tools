@@ -15,7 +15,7 @@ const appConfigDir = "z-server-backup-tools"
 
 type diskConfig struct {
 	SkippedUpdateVersion   string                    `json:"skippedUpdateVersion,omitempty"`
-	Backup                 model.BackupConfig        `json:"backup"`
+	Backup                 model.NotifyConfig        `json:"backup,omitempty"`
 	Servers                []model.Server            `json:"servers,omitempty"`
 	BackupTasks            []model.BackupTask        `json:"backupTasks,omitempty"`
 	ActiveTaskID           string                    `json:"activeTaskId,omitempty"`
@@ -64,12 +64,6 @@ func NewStore() (*Store, error) {
 	if err := store.load(); err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
-	if store.Backup.Port == 0 {
-		store.Backup.Port = 22
-	}
-	if store.Backup.MaxPartGB == 0 {
-		store.Backup.MaxPartGB = 2
-	}
 	return store, nil
 }
 
@@ -83,19 +77,38 @@ func (s *Store) load() error {
 	if err != nil {
 		return err
 	}
-	var payload diskConfig
-	if err := json.Unmarshal(data, &payload); err != nil {
+	var envelope struct {
+		SkippedUpdateVersion   string                    `json:"skippedUpdateVersion,omitempty"`
+		Backup                 json.RawMessage           `json:"backup"`
+		Servers                []model.Server            `json:"servers,omitempty"`
+		BackupTasks            []model.BackupTask        `json:"backupTasks,omitempty"`
+		ActiveTaskID           string                    `json:"activeTaskId,omitempty"`
+		ActiveSingleFileTaskID string                    `json:"activeSingleFileTaskId,omitempty"`
+		BackupTiming           model.BackupTimingSession `json:"backupTiming,omitempty"`
+		SingleFile             model.SingleFileConfig    `json:"singleFileBackup,omitempty"`
+	}
+	if err := json.Unmarshal(data, &envelope); err != nil {
 		return err
 	}
-	s.SkippedUpdateVersion = payload.SkippedUpdateVersion
-	s.Backup = payload.Backup
-	s.Servers = payload.Servers
-	s.BackupTasks = payload.BackupTasks
-	s.ActiveTaskID = payload.ActiveTaskID
-	s.ActiveSingleFileTaskID = payload.ActiveSingleFileTaskID
-	s.BackupTiming = payload.BackupTiming
-	s.SingleFile = payload.SingleFile
-	if s.migrateLegacyTask() {
+	var legacyBackup model.BackupConfig
+	if len(envelope.Backup) > 0 {
+		if err := json.Unmarshal(envelope.Backup, &legacyBackup); err != nil {
+			return err
+		}
+	}
+	s.SkippedUpdateVersion = envelope.SkippedUpdateVersion
+	s.Backup = legacyBackup
+	s.Servers = envelope.Servers
+	s.BackupTasks = envelope.BackupTasks
+	s.ActiveTaskID = envelope.ActiveTaskID
+	s.ActiveSingleFileTaskID = envelope.ActiveSingleFileTaskID
+	s.BackupTiming = envelope.BackupTiming
+	s.SingleFile = envelope.SingleFile
+	migrated := s.migrateLegacyTask()
+	cleaned := s.Backup.NotifyOnly()
+	needsSave := migrated || s.Backup != cleaned
+	s.Backup = cleaned
+	if needsSave {
 		return s.save()
 	}
 	return nil
@@ -132,7 +145,7 @@ func (s *Store) migrateLegacyTask() bool {
 func (s *Store) save() error {
 	payload := diskConfig{
 		SkippedUpdateVersion:   s.SkippedUpdateVersion,
-		Backup:                 s.Backup,
+		Backup:                 model.NotifyConfigFrom(s.Backup),
 		Servers:                s.Servers,
 		BackupTasks:            s.BackupTasks,
 		ActiveTaskID:           s.ActiveTaskID,
@@ -179,7 +192,7 @@ func (s *Store) SetBackupConfig(cfg model.BackupConfig) error {
 	if err := s.load(); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	s.Backup = cfg
+	s.Backup = cfg.NotifyOnly()
 	return s.save()
 }
 

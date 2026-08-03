@@ -73,7 +73,7 @@ func sendConfiguredMail(cfg model.BackupConfig, to, subject, body string) error 
 	}
 	port := cfg.SmtpPort
 	if port <= 0 {
-		port = 587
+		port = 465
 	}
 	user := strings.TrimSpace(cfg.SmtpUser)
 	pass := cfg.SmtpPassword

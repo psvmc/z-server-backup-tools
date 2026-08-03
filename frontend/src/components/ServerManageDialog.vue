@@ -39,17 +39,15 @@ const {
     :mask-closable="false"
     centered
     :footer="null"
-    :body-style="{ maxHeight: 'calc(100vh - 160px)', overflowY: 'auto', overflowX: 'hidden' }"
+    title="服务器管理"
   >
-    <template #title>
-      <div class="server-manage-title">
-        <span>服务器管理</span>
-        <a-button type="primary" size="small" @click="openAdd">添加</a-button>
-      </div>
-    </template>
-
     <a-spin :spinning="loading">
-      <a-table
+      <div class="server-manage-body">
+        <div class="server-manage-body__header">
+          <a-button type="primary" size="small" @click="openAdd">添加</a-button>
+        </div>
+
+        <a-table
         v-if="rows.length > 0"
         size="small"
         :columns="serverTableColumns"
@@ -83,19 +81,20 @@ const {
         </template>
       </a-table>
       <a-empty v-else description="暂无服务器，点击「添加」创建" />
+      </div>
     </a-spin>
   </a-modal>
 
   <a-modal
     v-model:open="formOpen"
     :title="isEdit ? '编辑服务器' : '添加服务器'"
-    :width="720"
+    width="90vw"
+    wrap-class-name="server-form-modal"
     :mask-closable="false"
     :confirm-loading="saving"
     ok-text="保存"
     cancel-text="取消"
     centered
-    :body-style="{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto', overflowX: 'hidden' }"
     @ok="onSave"
   >
     <a-form layout="vertical" size="small" class="server-form">
@@ -196,12 +195,16 @@ const {
 </template>
 
 <style scoped>
-.server-manage-title {
+.server-manage-body {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-right: 28px;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.server-manage-body__header {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .server-manage-table {
@@ -220,19 +223,19 @@ const {
 
 .settings-block {
   padding: 12px 14px;
-  border: 1px solid #dcebe4;
+  border: 1px solid var(--app-border);
   border-radius: 10px;
-  background: linear-gradient(180deg, #fafdfb 0%, #ffffff 100%);
+  background: linear-gradient(180deg, var(--app-surface-card) 0%, #ffffff 100%);
   margin-bottom: 12px;
 }
 
 .settings-block-title {
   font-size: 13px;
   font-weight: 600;
-  color: #1a4d42;
+  color: var(--app-primary-dark);
   margin-bottom: 10px;
   padding-bottom: 6px;
-  border-bottom: 1px solid #e8f2ee;
+  border-bottom: 1px solid var(--app-border-light);
 }
 
 .settings-block-actions {
@@ -251,14 +254,14 @@ const {
   font-size: 12px;
   color: #4b635c;
   border-radius: 8px;
-  border: 1px solid #dcebe4;
-  background: #f3faf7;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface-muted);
   padding: 10px 12px;
 }
 
 .settings-derived-paths-label {
   font-weight: 500;
-  color: #2d6a5a;
+  color: var(--app-primary);
   margin-bottom: 8px;
 }
 
@@ -279,7 +282,7 @@ const {
 .settings-derived-paths-list dt {
   margin: 0;
   font-weight: 500;
-  color: #5a7a72;
+  color: var(--app-primary-muted);
 }
 
 .settings-derived-paths-list dd {

@@ -142,31 +142,31 @@ watch(autoScrollLog, (on) => {
 
           <div class="backup-run-panel__main">
             <div class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
-              <div class="rounded-lg border border-emerald-100/80 bg-white/60 px-3 py-2">
+              <div class="rounded-lg border border-blue-100/80 bg-white/60 px-3 py-2">
                 <div class="text-xs text-gray-500 mb-1">状态</div>
                 <a-tag :color="statusTagColor">{{ statusLabel }}</a-tag>
               </div>
-              <div class="rounded-lg border border-emerald-100/80 bg-white/60 px-3 py-2">
+              <div class="rounded-lg border border-blue-100/80 bg-white/60 px-3 py-2">
                 <div class="text-xs text-gray-500 mb-1">阶段</div>
-                <div class="text-sm font-medium text-emerald-900">{{ phaseLabel }}</div>
+                <div class="text-sm font-medium text-blue-900">{{ phaseLabel }}</div>
               </div>
-              <div class="rounded-lg border border-emerald-100/80 bg-white/60 px-3 py-2">
+              <div class="rounded-lg border border-blue-100/80 bg-white/60 px-3 py-2">
                 <div class="text-xs text-gray-500 mb-1">文件进度</div>
                 <div class="text-sm font-medium">{{ status.packedFiles }} / {{ status.totalFiles || "?" }}</div>
               </div>
-              <div class="rounded-lg border border-emerald-100/80 bg-white/60 px-3 py-2">
+              <div class="rounded-lg border border-blue-100/80 bg-white/60 px-3 py-2">
                 <div class="text-xs text-gray-500 mb-1">已用时</div>
                 <div class="text-sm font-medium tabular-nums">{{ elapsedText }}</div>
               </div>
-              <div class="rounded-lg border border-emerald-100/80 bg-white/60 px-3 py-2">
+              <div class="rounded-lg border border-blue-100/80 bg-white/60 px-3 py-2">
                 <div class="text-xs text-gray-500 mb-1">剩余用时（估）</div>
                 <div class="text-sm font-medium tabular-nums">{{ remainingText }}</div>
               </div>
-              <div class="rounded-lg border border-emerald-100/80 bg-white/60 px-3 py-2 min-w-0">
+              <div class="rounded-lg border border-blue-100/80 bg-white/60 px-3 py-2 min-w-0">
                 <div class="text-xs text-gray-500 mb-1">最大文件</div>
                 <div class="text-sm font-medium tabular-nums truncate" :title="maxFileText">{{ maxFileText }}</div>
               </div>
-              <div class="rounded-lg border border-emerald-100/80 bg-white/60 px-3 py-2">
+              <div class="rounded-lg border border-blue-100/80 bg-white/60 px-3 py-2">
                 <div class="text-xs text-gray-500 mb-1">超分卷数</div>
                 <div
                   class="text-sm font-medium tabular-nums"
@@ -175,7 +175,7 @@ watch(autoScrollLog, (on) => {
                   {{ oversizedCountText }}
                 </div>
               </div>
-              <div class="rounded-lg border border-emerald-100/80 bg-white/60 px-3 py-2">
+              <div class="rounded-lg border border-blue-100/80 bg-white/60 px-3 py-2">
                 <div class="text-xs text-gray-500 mb-1">当前分卷</div>
                 <div class="text-sm font-medium truncate" :title="status.currentPart">{{ status.currentPart || "-" }}</div>
               </div>

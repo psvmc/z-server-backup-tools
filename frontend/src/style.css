@@ -3,7 +3,19 @@
 :root {
   font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   color: #2c3e50;
-  background: #eef6f2;
+  background: #eef6fc;
+  --app-primary: #2a95fe;
+  --app-primary-dark: #1a6fc9;
+  --app-primary-text: #1a5f99;
+  --app-primary-muted: #5a8fb8;
+  --app-border: #d4e8fb;
+  --app-border-light: #e6f2fc;
+  --app-surface: #eef6fc;
+  --app-surface-alt: #f4f9fe;
+  --app-surface-card: #fafcfe;
+  --app-surface-muted: #f3f8fc;
+  --app-surface-log: #f7fafc;
+  --app-hover: #e8f3fc;
 }
 
 html,
@@ -41,60 +53,22 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: linear-gradient(165deg, #f4fbf7 0%, #e8f3ee 45%, #eef6f2 100%);
-}
-
-.app-titlebar {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 20px;
-  border-bottom: 1px solid #d6ebe3;
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(8px);
-}
-
-.app-titlebar-main {
-  font-size: 15px;
-  font-weight: 600;
-  color: #3d6b5c;
-  letter-spacing: 0.02em;
+  background: linear-gradient(165deg, #f4f9fe 0%, #e8f3fc 45%, #eef6fc 100%);
 }
 
 .app-version-btn {
   border: none;
   background: transparent;
-  color: #6b9080;
+  color: var(--app-primary-muted);
   font-size: 12px;
   cursor: pointer;
   padding: 4px 10px;
   border-radius: 6px;
+  line-height: 22px;
 }
 
 .app-version-btn:hover {
-  background: #e3f2eb;
-}
-
-.app-body {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 4px 16px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  overflow: hidden;
-}
-
-.app-body > .panel-card--grow {
-  flex: 1 1 0;
-  min-height: 0;
-}
-
-.app-body > .panel-card:not(.panel-card--grow) {
-  flex-shrink: 0;
+  background: var(--app-hover);
 }
 
 .app-main-tabs {
@@ -103,11 +77,15 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding: 4px 16px 16px;
+  box-sizing: border-box;
 }
 
 .app-main-tabs > .ant-tabs-nav {
   flex-shrink: 0;
   margin-bottom: 12px;
+  padding: 6px 0 0;
+  border-bottom: 1px solid var(--app-border);
 }
 
 .app-main-tabs > .ant-tabs-content-holder {
@@ -137,9 +115,9 @@ body {
   width: 100%;
   box-sizing: border-box;
   background: rgba(255, 255, 255, 0.88);
-  border: 1px solid #dcebe4;
+  border: 1px solid var(--app-border);
   border-radius: 10px;
-  box-shadow: 0 6px 18px rgba(72, 120, 98, 0.06);
+  box-shadow: 0 6px 18px rgba(42, 149, 254, 0.08);
 }
 
 .panel-card--grow {
@@ -159,9 +137,9 @@ body {
 
 .panel-card-header {
   padding: 10px 16px;
-  border-bottom: 1px solid #eaf3ef;
+  border-bottom: 1px solid var(--app-border-light);
   font-weight: 600;
-  color: #4a7768;
+  color: var(--app-primary-text);
   font-size: 13px;
 }
 
@@ -213,8 +191,8 @@ body {
   font-family: Consolas, "Courier New", monospace;
   font-size: 12px;
   line-height: 1.45;
-  background: #f7fbf9;
-  border: 1px solid #e2eee8;
+  background: var(--app-surface-log);
+  border: 1px solid var(--app-border-light);
   border-radius: 8px;
   padding: 10px 12px;
   white-space: pre-wrap;
@@ -259,12 +237,49 @@ body {
   }
 }
 
+.backup-settings-modal .ant-modal {
+  max-width: calc(100vw - 32px);
+}
+
 .backup-settings-modal .ant-modal-body {
   max-height: calc(100vh - 200px);
   overflow-x: hidden;
   overflow-y: auto;
   padding-top: 12px;
   padding-bottom: 16px;
+}
+
+.server-manage-modal .ant-modal {
+  max-width: calc(100vw - 32px);
+}
+
+.server-manage-modal .ant-modal-content {
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.server-manage-modal .ant-modal-header {
+  flex-shrink: 0;
+}
+
+.server-manage-modal .ant-modal-body {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.server-form-modal .ant-modal {
+  max-width: 90vw;
+}
+
+.server-form-modal .ant-modal-body {
+  max-height: calc(100vh - 200px);
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .remote-dir-picker-modal .ant-modal {

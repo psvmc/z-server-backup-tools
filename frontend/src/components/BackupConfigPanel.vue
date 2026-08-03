@@ -25,14 +25,14 @@ const { mailTesting, testEmail } = useBackupConfigPanel(config, props);
             />
           </a-form-item>
           <a-form-item label="SMTP 服务器">
-            <a-input v-model:value="config.smtp_host" placeholder="smtp.example.com" allow-clear />
+            <a-input v-model:value="config.smtp_host" placeholder="smtp.qq.com" allow-clear />
           </a-form-item>
           <a-form-item label="SMTP 端口">
             <a-input-number
               v-model:value="config.smtp_port"
               :min="1"
               :max="65535"
-              placeholder="587"
+              placeholder="465"
               class="w-full"
             />
           </a-form-item>
@@ -72,18 +72,18 @@ const { mailTesting, testEmail } = useBackupConfigPanel(config, props);
 
 .settings-block {
   padding: 12px 14px;
-  border: 1px solid #dcebe4;
+  border: 1px solid var(--app-border);
   border-radius: 10px;
-  background: linear-gradient(180deg, #fafdfb 0%, #ffffff 100%);
+  background: linear-gradient(180deg, var(--app-surface-card) 0%, #ffffff 100%);
 }
 
 .settings-block-title {
   font-size: 13px;
   font-weight: 600;
-  color: #1a4d42;
+  color: var(--app-primary-dark);
   margin-bottom: 10px;
   padding-bottom: 6px;
-  border-bottom: 1px solid #e8f2ee;
+  border-bottom: 1px solid var(--app-border-light);
 }
 
 .config-form-grid--mail {

@@ -61,9 +61,9 @@ const { columns, rows } = useBackupTaskList(props);
 
 <style scoped>
 .backup-task-list {
-  border: 1px solid #dcebe4;
+  border: 1px solid var(--app-border);
   border-radius: 10px;
-  background: linear-gradient(180deg, #fafdfb 0%, #ffffff 100%);
+  background: linear-gradient(180deg, var(--app-surface-card) 0%, #ffffff 100%);
   padding: 10px 12px;
 }
 
@@ -78,7 +78,7 @@ const { columns, rows } = useBackupTaskList(props);
 .backup-task-list__title {
   font-size: 13px;
   font-weight: 600;
-  color: #1a4d42;
+  color: var(--app-primary-dark);
 }
 
 .backup-task-list__empty {
@@ -86,6 +86,6 @@ const { columns, rows } = useBackupTaskList(props);
 }
 
 .backup-task-list__table :deep(.backup-task-list__row--active > td) {
-  background: #eef9f4 !important;
+  background: #eef4fc !important;
 }
 </style>

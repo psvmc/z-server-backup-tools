@@ -22,7 +22,7 @@ const { onSaveNotify, openConfigFolder } = useBackupSettingsDialog(config, props
   <a-modal
     v-model:open="open"
     title="通知设置"
-    :width="720"
+    width="80%"
     wrap-class-name="backup-settings-modal"
     :mask-closable="false"
     :closable="!props.saving"
@@ -38,7 +38,7 @@ const { onSaveNotify, openConfigFolder } = useBackupSettingsDialog(config, props
       <div class="backup-settings-modal-footer">
         <div
           v-if="props.configPath"
-          class="backup-settings-modal-footer-path text-xs text-emerald-700/80 truncate"
+          class="backup-settings-modal-footer-path text-xs text-blue-700/80 truncate"
           :title="props.configPath"
         >
           配置文件：{{ props.configPath }}

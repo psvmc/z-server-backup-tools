@@ -115,6 +115,8 @@ export function emptyNotifyConfig(): BackupConfig {
     remote_source: "",
     local_dir: "",
     max_part_gb: 0,
+    smtp_host: "smtp.qq.com",
+    smtp_port: 465,
   };
 }
 

@@ -35,10 +35,6 @@ const {
 <template>
   <section class="panel-card panel-card--grow single-file-backup-panel">
     <div class="single-file-backup-panel__content">
-      <div class="panel-card-header panel-card-header--with-actions">
-        <span>单文件备份</span>
-      </div>
-
       <div class="panel-card-body single-file-backup-panel__body">
         <BackupTaskList
           variant="single"
@@ -53,17 +49,17 @@ const {
 
         <div class="single-file-backup-panel__main">
           <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div class="rounded-lg border border-emerald-100/80 bg-white/60 px-3 py-2">
+            <div class="rounded-lg border border-blue-100/80 bg-white/60 px-3 py-2">
               <div class="text-xs text-gray-500 mb-1">状态</div>
               <a-tag :color="statusTagColor">{{ statusLabel }}</a-tag>
             </div>
-            <div class="rounded-lg border border-emerald-100/80 bg-white/60 px-3 py-2 min-w-0">
+            <div class="rounded-lg border border-blue-100/80 bg-white/60 px-3 py-2 min-w-0">
               <div class="text-xs text-gray-500 mb-1">本机文件</div>
               <div class="text-sm font-medium truncate" :title="status.localFile || '-'">
                 {{ status.localFile || "-" }}
               </div>
             </div>
-            <div class="rounded-lg border border-emerald-100/80 bg-white/60 px-3 py-2 col-span-2 min-w-0">
+            <div class="rounded-lg border border-blue-100/80 bg-white/60 px-3 py-2 col-span-2 min-w-0">
               <div class="text-xs text-gray-500 mb-1">传输</div>
               <div class="text-sm font-medium tabular-nums truncate" :title="progressText || '-'">
                 {{ progressText || "-" }}
@@ -117,10 +113,6 @@ const {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.single-file-backup-panel__content > .panel-card-header {
-  flex-shrink: 0;
 }
 
 .single-file-backup-panel__body {

@@ -20,7 +20,6 @@ import { mergeJobConfig } from "./types/backup";
 
 import type { BackupConfig, BackupTask, BackupTaskKind } from "./types/backup";
 
-const appTitle = ref("服务器文件备份");
 const settingsOpen = ref(false);
 const serversOpen = ref(false);
 const taskFormOpen = ref(false);
@@ -82,23 +81,23 @@ const phaseLabel = computed(() => {
 onMounted(async () => {
   try {
     const ver = await loadCurrentVersion();
-    appTitle.value = `服务器文件备份 v${ver}`;
+    document.title = `服务器文件备份 v${ver}`;
   } catch {
-    // keep default
+    document.title = "服务器文件备份";
   }
   void checkOnStartup();
 });
 
 const appTheme = {
   token: {
-    colorPrimary: "#5bb8a8",
-    colorInfo: "#5bb8a8",
-    colorSuccess: "#52b788",
+    colorPrimary: "#2a95fe",
+    colorInfo: "#2a95fe",
+    colorSuccess: "#52c41a",
     borderRadius: 8,
     fontSize: 13,
     controlHeight: 32,
     colorBgContainer: "#ffffff",
-    colorBorder: "#dce8e4",
+    colorBorder: "#d4e8fb",
   },
   algorithm: theme.defaultAlgorithm,
 };
@@ -148,54 +147,48 @@ function onServersChanged() {
 <template>
   <a-config-provider :locale="zhCN" :theme="appTheme">
     <div class="app-shell">
-      <header class="app-titlebar">
-        <div class="app-titlebar-main">{{ appTitle }}</div>
-        <button type="button" class="app-version-btn" title="检查更新" @click="checkForUpdate">
-          检查更新
-        </button>
-      </header>
-
-      <div class="app-body">
-        <a-tabs v-model:activeKey="mainTab" class="app-main-tabs">
-          <template #rightExtra>
-            <a-space :size="8">
-              <a-button type="default" size="small" @click="serversOpen = true">服务器管理</a-button>
-              <a-button type="default" size="small" @click="settingsOpen = true">通知设置</a-button>
-            </a-space>
-          </template>
-          <a-tab-pane key="multi" tab="多文件备份" :disabled="singleRunning">
-            <BackupRunPanel
-              :status="status"
-              :config="config"
-              :job-config="jobConfig"
-              :tasks="tasks"
-              :active-task-id="activeTaskId"
-              :phase-label="phaseLabel"
-              :elapsed-text="elapsedText"
-              :remaining-text="remainingText"
-              :logs="logs"
-              :init-loading="remoteInitLoading"
-              @start="startBackup"
-              @stop="stopBackup"
-              @refresh="refreshStatus"
-              @init="initRemote"
-              @reset="resetBackupTask"
-              @add-task="openAddTask"
-              @edit-task="openEditTask"
-              @select-task="selectTask"
-              @remove-task="removeTask"
-            />
-          </a-tab-pane>
-          <a-tab-pane key="single" tab="单文件备份" :disabled="multiRunning">
-            <SingleFileBackupPanel
-              :disabled-by-other-job="multiRunning"
-              :panel-active="singlePanelActive"
-              @add-task="openAddSingleTask"
-              @edit-task="openEditSingleTask"
-            />
-          </a-tab-pane>
-        </a-tabs>
-      </div>
+      <a-tabs v-model:activeKey="mainTab" class="app-main-tabs">
+        <template #rightExtra>
+          <a-space :size="8">
+            <a-button type="default" size="small" @click="serversOpen = true">服务器管理</a-button>
+            <a-button type="default" size="small" @click="settingsOpen = true">通知设置</a-button>
+            <button type="button" class="app-version-btn" title="检查更新" @click="checkForUpdate">
+              检查更新
+            </button>
+          </a-space>
+        </template>
+        <a-tab-pane key="multi" tab="多文件备份" :disabled="singleRunning">
+          <BackupRunPanel
+            :status="status"
+            :config="config"
+            :job-config="jobConfig"
+            :tasks="tasks"
+            :active-task-id="activeTaskId"
+            :phase-label="phaseLabel"
+            :elapsed-text="elapsedText"
+            :remaining-text="remainingText"
+            :logs="logs"
+            :init-loading="remoteInitLoading"
+            @start="startBackup"
+            @stop="stopBackup"
+            @refresh="refreshStatus"
+            @init="initRemote"
+            @reset="resetBackupTask"
+            @add-task="openAddTask"
+            @edit-task="openEditTask"
+            @select-task="selectTask"
+            @remove-task="removeTask"
+          />
+        </a-tab-pane>
+        <a-tab-pane key="single" tab="单文件备份" :disabled="multiRunning">
+          <SingleFileBackupPanel
+            :disabled-by-other-job="multiRunning"
+            :panel-active="singlePanelActive"
+            @add-task="openAddSingleTask"
+            @edit-task="openEditSingleTask"
+          />
+        </a-tab-pane>
+      </a-tabs>
 
       <BackupSettingsDialog
         v-model:open="settingsOpen"

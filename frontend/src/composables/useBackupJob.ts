@@ -116,8 +116,8 @@ export function useBackupJob() {
     config.value = {
       ...emptyNotifyConfig(),
       notify_email: stored.notify_email,
-      smtp_host: stored.smtp_host,
-      smtp_port: stored.smtp_port,
+      smtp_host: stored.smtp_host?.trim() || "smtp.qq.com",
+      smtp_port: stored.smtp_port && stored.smtp_port > 0 ? stored.smtp_port : 465,
       smtp_user: stored.smtp_user,
       smtp_password: stored.smtp_password,
     };
@@ -182,7 +182,12 @@ export function useBackupJob() {
   };
 
   const saveNotify = async (payload?: BackupConfig): Promise<boolean> => {
-    const toSave = { ...emptyNotifyConfig(), ...(payload ?? config.value) };
+    const raw = { ...emptyNotifyConfig(), ...(payload ?? config.value) };
+    const toSave = {
+      ...raw,
+      smtp_host: raw.smtp_host?.trim() || "smtp.qq.com",
+      smtp_port: raw.smtp_port && raw.smtp_port > 0 ? raw.smtp_port : 465,
+    };
     settingsSaving.value = true;
     try {
       await BackupService.SaveNotifyConfig(toBindingConfig(toSave));

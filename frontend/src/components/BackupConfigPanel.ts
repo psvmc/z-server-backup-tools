@@ -30,7 +30,7 @@ export function useBackupConfigPanel(
     try {
       const payload = {
         ...config.value,
-        smtp_port: config.value.smtp_port && config.value.smtp_port > 0 ? config.value.smtp_port : 587,
+        smtp_port: config.value.smtp_port && config.value.smtp_port > 0 ? config.value.smtp_port : 465,
       };
       const cfg = BackupConfigBinding.createFrom(JSON.parse(JSON.stringify(payload)));
       await BackupService.TestEmailNotification(cfg);
