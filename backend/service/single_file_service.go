@@ -64,35 +64,6 @@ func singleFileLocalPath(remoteFile, localDir string) (string, error) {
 	return filepath.Join(localDir, base), nil
 }
 
-func (s *SingleFileBackupService) GetConfig() model.SingleFileConfig {
-	if s.store == nil {
-		return model.SingleFileConfig{}
-	}
-	return s.store.GetSingleFileConfig()
-}
-
-func (s *SingleFileBackupService) SaveConfig(cfg model.SingleFileConfig) error {
-	if s.store == nil {
-		return fmt.Errorf("配置存储不可用")
-	}
-	cfg.ServerID = strings.TrimSpace(cfg.ServerID)
-	cfg.RemoteFile = strings.TrimSpace(cfg.RemoteFile)
-	cfg.LocalDir = strings.TrimSpace(cfg.LocalDir)
-	if cfg.ServerID == "" {
-		return fmt.Errorf("请选择服务器")
-	}
-	if _, err := lookupServer(s.store, cfg.ServerID); err != nil {
-		return err
-	}
-	if cfg.RemoteFile == "" {
-		return fmt.Errorf("远程文件路径不能为空")
-	}
-	if cfg.LocalDir == "" {
-		return fmt.Errorf("本机保存目录不能为空")
-	}
-	return s.store.SetSingleFileConfig(cfg)
-}
-
 func (s *SingleFileBackupService) GetStatus() model.JobStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()

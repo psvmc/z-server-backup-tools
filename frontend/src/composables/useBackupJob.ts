@@ -271,6 +271,16 @@ export function useBackupJob() {
     message.info("已请求停止");
   };
 
+  const openConfigFolder = async () => {
+    const path = configPath.value?.trim();
+    if (!path) return;
+    try {
+      await BackupService.OpenInExplorer(path);
+    } catch (err) {
+      message.error(formatError(err));
+    }
+  };
+
   onMounted(async () => {
     try {
       await loadConfig();
@@ -307,6 +317,7 @@ export function useBackupJob() {
     jobConfig,
     findServer,
     configPath,
+    openConfigFolder,
     status,
     logs,
     settingsSaving,

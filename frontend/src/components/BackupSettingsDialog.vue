@@ -7,7 +7,6 @@ const open = defineModel<boolean>("open", { required: true });
 const config = defineModel<BackupConfig>("config", { required: true });
 
 const props = defineProps<{
-  configPath: string;
   saving?: boolean;
 }>();
 
@@ -15,7 +14,7 @@ const emit = defineEmits<{
   saveNotify: [cfg: BackupConfig];
 }>();
 
-const { onSaveNotify, openConfigFolder } = useBackupSettingsDialog(config, props, emit);
+const { onSaveNotify } = useBackupSettingsDialog(config, props, emit);
 </script>
 
 <template>
@@ -35,19 +34,9 @@ const { onSaveNotify, openConfigFolder } = useBackupSettingsDialog(config, props
     </a-spin>
 
     <template #footer>
-      <div class="backup-settings-modal-footer">
-        <div
-          v-if="props.configPath"
-          class="backup-settings-modal-footer-path text-xs text-blue-700/80 truncate"
-          :title="props.configPath"
-        >
-          配置文件：{{ props.configPath }}
-        </div>
-        <a-button v-if="props.configPath" @click="openConfigFolder">打开所在文件夹</a-button>
-        <a-button type="primary" :loading="props.saving" :disabled="props.saving" @click="onSaveNotify">
-          保存配置
-        </a-button>
-      </div>
+      <a-button type="primary" :loading="props.saving" :disabled="props.saving" @click="onSaveNotify">
+        保存配置
+      </a-button>
     </template>
   </a-modal>
 </template>
@@ -60,20 +49,5 @@ const { onSaveNotify, openConfigFolder } = useBackupSettingsDialog(config, props
 
 .settings-save-spin :deep(.ant-spin-container) {
   width: 100%;
-}
-
-.backup-settings-modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  width: 100%;
-}
-
-.backup-settings-modal-footer-path {
-  flex: 1;
-  min-width: 0;
-  text-align: left;
-  line-height: 1.4;
 }
 </style>

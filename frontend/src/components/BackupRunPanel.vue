@@ -4,6 +4,7 @@ import type { BackupConfig, BackupTask, JobStatus } from "../types/backup";
 import { formatBytes } from "../utils/size";
 import BackupLocalPartsModal from "./BackupLocalPartsModal.vue";
 import BackupTaskList from "./BackupTaskList.vue";
+import { confirmInitRemote } from "./BackupRunPanel";
 
 const props = defineProps<{
   status: JobStatus;
@@ -18,10 +19,9 @@ const props = defineProps<{
   initLoading?: boolean;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   start: [];
   stop: [];
-  refresh: [];
   init: [];
   reset: [];
   addTask: [];
@@ -29,6 +29,10 @@ defineEmits<{
   selectTask: [id: string];
   removeTask: [task: BackupTask];
 }>();
+
+function onInitClick() {
+  confirmInitRemote(() => emit("init"));
+}
 
 const hasActiveTask = computed(() => !!props.activeTaskId?.trim());
 
@@ -115,20 +119,6 @@ watch(autoScrollLog, (on) => {
   <section class="panel-card panel-card--grow backup-run-panel">
     <a-spin :spinning="!!initLoading" tip="远程 init 扫描中…" wrapper-class-name="backup-run-panel__spin">
       <div class="backup-run-panel__content">
-        <div class="panel-card-header panel-card-header--with-actions">
-          <span>备份任务</span>
-          <div class="panel-card-header-actions">
-            <a-button
-              type="default"
-              size="small"
-              :disabled="status.running || !!initLoading || !hasActiveTask"
-              @click="$emit('init')"
-            >
-              远程 init
-            </a-button>
-          </div>
-        </div>
-
         <div class="panel-card-body backup-run-panel__body">
           <BackupTaskList
             :tasks="tasks"
@@ -192,9 +182,11 @@ watch(autoScrollLog, (on) => {
             <a-progress class="panel-progress" :percent="progressPercent" status="active" />
 
             <div class="flex flex-wrap gap-2 items-center">
+              <a-button :disabled="status.running || !!initLoading || !hasActiveTask" @click="onInitClick">
+                远程 init
+              </a-button>
               <a-button type="primary" :disabled="status.running || !hasActiveTask" @click="$emit('start')">{{ startBackupLabel }}</a-button>
               <a-button danger :disabled="!status.running" @click="$emit('stop')">停止</a-button>
-              <a-button :disabled="!hasActiveTask" @click="$emit('refresh')">刷新状态</a-button>
               <a-popconfirm
                 title="重置远程备份进度？保留文件清单，下次将从第一个文件重新打包。不会删除本机已下载文件。"
                 ok-text="重置"
@@ -258,10 +250,6 @@ watch(autoScrollLog, (on) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-.backup-run-panel__content > .panel-card-header {
-  flex-shrink: 0;
 }
 
 .backup-run-panel__body {

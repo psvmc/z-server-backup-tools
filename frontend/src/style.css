@@ -166,11 +166,24 @@ body {
   align-items: center;
   gap: 12px;
   margin-left: auto;
+  min-height: 32px;
 }
 
 .backup-toolbar-trailing .ant-checkbox-wrapper {
+  display: inline-flex;
   align-items: center;
-  line-height: 32px;
+  line-height: 1;
+  height: 32px;
+  margin-inline-end: 0;
+}
+
+.backup-toolbar-trailing .ant-checkbox-wrapper .ant-checkbox {
+  top: 0;
+  align-self: center;
+}
+
+.backup-toolbar-trailing .ant-checkbox-wrapper > span:last-child {
+  line-height: 22px;
 }
 
 .log-box-wrap {

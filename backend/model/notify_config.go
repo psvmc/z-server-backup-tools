@@ -2,7 +2,7 @@ package model
 
 import "strings"
 
-// NotifyConfig is the backup block persisted in config.json (email/SMTP only).
+// NotifyConfig is the email_config block persisted in config.json (email/SMTP only).
 type NotifyConfig struct {
 	NotifyEmail  string `json:"notify_email,omitempty"`
 	SmtpHost     string `json:"smtp_host,omitempty"`

@@ -14,14 +14,13 @@ import (
 const appConfigDir = "z-server-backup-tools"
 
 type diskConfig struct {
-	SkippedUpdateVersion   string                    `json:"skippedUpdateVersion,omitempty"`
-	Backup                 model.NotifyConfig        `json:"backup,omitempty"`
+	SkippedUpdateVersion   string                    `json:"skipped_update_version,omitempty"`
+	EmailConfig            model.NotifyConfig        `json:"email_config,omitempty"`
 	Servers                []model.Server            `json:"servers,omitempty"`
-	BackupTasks            []model.BackupTask        `json:"backupTasks,omitempty"`
-	ActiveTaskID           string                    `json:"activeTaskId,omitempty"`
-	ActiveSingleFileTaskID string                    `json:"activeSingleFileTaskId,omitempty"`
-	BackupTiming           model.BackupTimingSession `json:"backupTiming,omitempty"`
-	SingleFile             model.SingleFileConfig    `json:"singleFileBackup,omitempty"`
+	BackupTasks            []model.BackupTask        `json:"backup_tasks,omitempty"`
+	ActiveTaskID           string                    `json:"active_task_id,omitempty"`
+	ActiveSingleFileTaskID string                    `json:"active_single_file_task_id,omitempty"`
+	BackupTiming           model.BackupTimingSession `json:"backup_timing,omitempty"`
 }
 
 type Store struct {
@@ -34,7 +33,6 @@ type Store struct {
 	ActiveTaskID           string
 	ActiveSingleFileTaskID string
 	BackupTiming           model.BackupTimingSession
-	SingleFile             model.SingleFileConfig
 }
 
 var (
@@ -77,81 +75,29 @@ func (s *Store) load() error {
 	if err != nil {
 		return err
 	}
-	var envelope struct {
-		SkippedUpdateVersion   string                    `json:"skippedUpdateVersion,omitempty"`
-		Backup                 json.RawMessage           `json:"backup"`
-		Servers                []model.Server            `json:"servers,omitempty"`
-		BackupTasks            []model.BackupTask        `json:"backupTasks,omitempty"`
-		ActiveTaskID           string                    `json:"activeTaskId,omitempty"`
-		ActiveSingleFileTaskID string                    `json:"activeSingleFileTaskId,omitempty"`
-		BackupTiming           model.BackupTimingSession `json:"backupTiming,omitempty"`
-		SingleFile             model.SingleFileConfig    `json:"singleFileBackup,omitempty"`
-	}
-	if err := json.Unmarshal(data, &envelope); err != nil {
+	var payload diskConfig
+	if err := json.Unmarshal(data, &payload); err != nil {
 		return err
 	}
-	var legacyBackup model.BackupConfig
-	if len(envelope.Backup) > 0 {
-		if err := json.Unmarshal(envelope.Backup, &legacyBackup); err != nil {
-			return err
-		}
-	}
-	s.SkippedUpdateVersion = envelope.SkippedUpdateVersion
-	s.Backup = legacyBackup
-	s.Servers = envelope.Servers
-	s.BackupTasks = envelope.BackupTasks
-	s.ActiveTaskID = envelope.ActiveTaskID
-	s.ActiveSingleFileTaskID = envelope.ActiveSingleFileTaskID
-	s.BackupTiming = envelope.BackupTiming
-	s.SingleFile = envelope.SingleFile
-	migrated := s.migrateLegacyTask()
-	cleaned := s.Backup.NotifyOnly()
-	needsSave := migrated || s.Backup != cleaned
-	s.Backup = cleaned
-	if needsSave {
-		return s.save()
-	}
+	s.SkippedUpdateVersion = payload.SkippedUpdateVersion
+	s.Backup = payload.EmailConfig.BackupConfig()
+	s.Servers = payload.Servers
+	s.BackupTasks = payload.BackupTasks
+	s.ActiveTaskID = payload.ActiveTaskID
+	s.ActiveSingleFileTaskID = payload.ActiveSingleFileTaskID
+	s.BackupTiming = payload.BackupTiming
 	return nil
-}
-
-func (s *Store) migrateLegacyTask() bool {
-	if len(s.BackupTasks) > 0 {
-		return false
-	}
-	src := strings.TrimSpace(s.Backup.RemoteSource)
-	local := strings.TrimSpace(s.Backup.LocalDir)
-	prefix := strings.TrimSpace(s.Backup.PartNamePrefix)
-	if src == "" && local == "" && prefix == "" {
-		return false
-	}
-	task := model.BackupTask{
-		ID:             "default",
-		Name:           "默认任务",
-		RemoteSource:   src,
-		LocalDir:       local,
-		PartNamePrefix: prefix,
-	}
-	s.BackupTasks = []model.BackupTask{task}
-	if strings.TrimSpace(s.ActiveTaskID) == "" {
-		s.ActiveTaskID = task.ID
-	}
-	s.Backup.RemoteSource = ""
-	s.Backup.LocalDir = ""
-	s.Backup.PartNamePrefix = ""
-	s.Backup.TaskID = ""
-	return true
 }
 
 func (s *Store) save() error {
 	payload := diskConfig{
 		SkippedUpdateVersion:   s.SkippedUpdateVersion,
-		Backup:                 model.NotifyConfigFrom(s.Backup),
+		EmailConfig:            model.NotifyConfigFrom(s.Backup),
 		Servers:                s.Servers,
 		BackupTasks:            s.BackupTasks,
 		ActiveTaskID:           s.ActiveTaskID,
 		ActiveSingleFileTaskID: s.ActiveSingleFileTaskID,
 		BackupTiming:           s.BackupTiming,
-		SingleFile:             s.SingleFile,
 	}
 	data, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
@@ -273,22 +219,6 @@ func (s *Store) SetActiveSingleFileTaskID(id string) error {
 		return err
 	}
 	s.ActiveSingleFileTaskID = strings.TrimSpace(id)
-	return s.save()
-}
-
-func (s *Store) GetSingleFileConfig() model.SingleFileConfig {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.SingleFile
-}
-
-func (s *Store) SetSingleFileConfig(cfg model.SingleFileConfig) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := s.load(); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	s.SingleFile = cfg
 	return s.save()
 }
 

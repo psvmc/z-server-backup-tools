@@ -10,7 +10,7 @@ defineEmits<{
   remove: [task: BackupTask];
 }>();
 
-const { columns, rows } = useBackupTaskList(props);
+const { columns, rows, scrollX, isEllipsisColumnKey, ellipsisCellText } = useBackupTaskList(props);
 </script>
 
 <template>
@@ -26,11 +26,22 @@ const { columns, rows } = useBackupTaskList(props);
       :columns="columns"
       :data-source="rows"
       :pagination="false"
+      :scroll="{ x: scrollX }"
       :row-class-name="(record) => (record.id === activeTaskId ? 'backup-task-list__row--active' : '')"
       class="backup-task-list__table"
     >
       <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'actions'">
+        <template v-if="isEllipsisColumnKey(column.key)">
+          <a-tooltip
+            v-if="ellipsisCellText(record, column.key)"
+            :title="ellipsisCellText(record, column.key)"
+            placement="topLeft"
+          >
+            <span class="backup-task-list__path">{{ ellipsisCellText(record, column.key) }}</span>
+          </a-tooltip>
+          <span v-else class="backup-task-list__path backup-task-list__path--empty">-</span>
+        </template>
+        <template v-else-if="column.key === 'actions'">
           <a-space :size="4">
             <a-button
               type="link"
@@ -87,5 +98,18 @@ const { columns, rows } = useBackupTaskList(props);
 
 .backup-task-list__table :deep(.backup-task-list__row--active > td) {
   background: #eef4fc !important;
+}
+
+.backup-task-list__path {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  cursor: default;
+}
+
+.backup-task-list__path--empty {
+  color: var(--app-text-muted, #9ca3af);
 }
 </style>

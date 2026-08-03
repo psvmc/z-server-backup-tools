@@ -35,6 +35,7 @@ const {
   activeTask,
   findServer,
   configPath,
+  openConfigFolder,
   status,
   logs,
   settingsSaving,
@@ -152,6 +153,9 @@ function onServersChanged() {
           <a-space :size="8">
             <a-button type="default" size="small" @click="serversOpen = true">服务器管理</a-button>
             <a-button type="default" size="small" @click="settingsOpen = true">通知设置</a-button>
+            <a-button type="default" size="small" :disabled="!configPath" @click="openConfigFolder">
+              打开配置目录
+            </a-button>
             <button type="button" class="app-version-btn" title="检查更新" @click="checkForUpdate">
               检查更新
             </button>
@@ -171,7 +175,6 @@ function onServersChanged() {
             :init-loading="remoteInitLoading"
             @start="startBackup"
             @stop="stopBackup"
-            @refresh="refreshStatus"
             @init="initRemote"
             @reset="resetBackupTask"
             @add-task="openAddTask"
@@ -193,7 +196,6 @@ function onServersChanged() {
       <BackupSettingsDialog
         v-model:open="settingsOpen"
         v-model:config="config"
-        :config-path="configPath"
         :saving="settingsSaving"
         @save-notify="onSaveNotify"
       />

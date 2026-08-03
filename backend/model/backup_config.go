@@ -30,7 +30,7 @@ type BackupConfig struct {
 	KnownHostsFile string  `json:"known_hosts_file,omitempty"`
 }
 
-// NotifyOnly returns email/SMTP fields for config.json backup block persistence.
+// NotifyOnly returns email/SMTP fields for config.json email_config persistence.
 func (c BackupConfig) NotifyOnly() BackupConfig {
 	return BackupConfig{
 		NotifyEmail:  strings.TrimSpace(c.NotifyEmail),

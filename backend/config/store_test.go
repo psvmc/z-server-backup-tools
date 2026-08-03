@@ -10,20 +10,12 @@ import (
 	"z-server-backup-tools/backend/model"
 )
 
-func TestStoreSaveBackupNotifyOnly(t *testing.T) {
+func TestStoreSaveEmailConfigRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 
 	s := &Store{filePath: path}
 	s.Backup = model.BackupConfig{
-		Host:         "192.168.1.1",
-		Port:         22,
-		User:         "admin",
-		Password:     "secret",
-		RemoteAppDir: "D:/Tools/zipbak",
-		RemoteSource: "D:/data",
-		LocalDir:     "C:/backup",
-		MaxPartGB:    2,
 		NotifyEmail:  "a@b.c",
 		SmtpHost:     "smtp.qq.com",
 		SmtpPort:     465,
@@ -38,79 +30,23 @@ func TestStoreSaveBackupNotifyOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(data), `"host"`) || strings.Contains(string(data), `"remote_source"`) {
-		t.Fatalf("backup should only persist notify fields, got:\n%s", data)
+	if !strings.Contains(string(data), `"email_config"`) {
+		t.Fatalf("expected email_config in config file:\n%s", data)
 	}
 	var payload diskConfig
 	if err := json.Unmarshal(data, &payload); err != nil {
 		t.Fatal(err)
 	}
-	if payload.Backup.NotifyEmail != "a@b.c" || payload.Backup.SmtpHost != "smtp.qq.com" || payload.Backup.SmtpPort != 465 {
-		t.Fatalf("unexpected notify backup: %+v", payload.Backup)
+	if payload.EmailConfig.NotifyEmail != "a@b.c" || payload.EmailConfig.SmtpHost != "smtp.qq.com" || payload.EmailConfig.SmtpPort != 465 {
+		t.Fatalf("unexpected email_config: %+v", payload.EmailConfig)
 	}
 
 	s2 := &Store{filePath: path}
 	if err := s2.load(); err != nil {
 		t.Fatal(err)
 	}
-	if s2.Backup.Password != "" || s2.Backup.Host != "" {
-		t.Fatalf("loaded backup should be notify-only: %+v", s2.Backup)
-	}
-	if s2.Backup.SmtpPassword != "pass" {
-		t.Fatalf("password not loaded: %q", s2.Backup.SmtpPassword)
-	}
-}
-
-func TestStoreLoadStripsLegacyBackupFields(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-	raw := `{"backup":{"host":"1.1.1.1","port":22,"user":"u","notify_email":"a@b.c","smtp_host":"smtp.qq.com","smtp_port":465}}`
-	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	s := &Store{filePath: path}
-	if err := s.load(); err != nil {
-		t.Fatal(err)
-	}
-	if s.Backup.Host != "" || s.Backup.Port != 0 {
-		t.Fatalf("expected stripped backup, got %+v", s.Backup)
-	}
-	if s.Backup.NotifyEmail != "a@b.c" {
-		t.Fatalf("notify fields lost: %+v", s.Backup)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(data), `"host"`) {
-		t.Fatalf("config file should be rewritten without legacy fields:\n%s", data)
-	}
-	var payload diskConfig
-	if err := json.Unmarshal(data, &payload); err != nil {
-		t.Fatal(err)
-	}
-	if payload.Backup.NotifyEmail != "a@b.c" {
-		t.Fatalf("notify fields lost: %+v", payload.Backup)
-	}
-}
-
-func TestStoreSingleFileBackupRoundTrip(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
-	s := &Store{filePath: path}
-	s.SingleFile = model.SingleFileConfig{
-		RemoteFile: `D:\data\app.bak`,
-		LocalDir:   `C:\backup`,
-	}
-	if err := s.save(); err != nil {
-		t.Fatal(err)
-	}
-	s2 := &Store{filePath: path}
-	if err := s2.load(); err != nil {
-		t.Fatal(err)
-	}
-	if s2.SingleFile.RemoteFile != `D:\data\app.bak` || s2.SingleFile.LocalDir != `C:\backup` {
-		t.Fatalf("got %+v", s2.SingleFile)
+	if s2.Backup.NotifyEmail != "a@b.c" || s2.Backup.SmtpPassword != "pass" {
+		t.Fatalf("unexpected loaded email config: %+v", s2.Backup)
 	}
 }
 
@@ -147,10 +83,9 @@ func TestStoreDeleteServerBlockedWhenReferenced(t *testing.T) {
 		t.Fatal("expected delete blocked by task reference")
 	}
 	s.BackupTasks = nil
-	s.SingleFile = model.SingleFileConfig{ServerID: "s1", RemoteFile: `D:\f`, LocalDir: `C:\b`}
 	_ = s.save()
 	if err := s.DeleteServer("s1"); err != nil {
-		t.Fatal("expected delete allowed when only legacy singleFileBackup references server")
+		t.Fatal("expected delete allowed when server is not referenced by tasks")
 	}
 	if len(s.GetServers()) != 0 {
 		t.Fatal("expected empty")
@@ -188,5 +123,33 @@ func TestStoreDeleteServerBlockedBySingleKindTask(t *testing.T) {
 	}
 	if err := s.DeleteServer("s1"); err == nil {
 		t.Fatal("expected delete blocked by single task")
+	}
+}
+
+func TestStoreBackupTimingRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	s := &Store{filePath: path}
+	s.BackupTiming = model.BackupTimingSession{
+		StartedAtMs:        1000,
+		PackedFilesAtStart: 2,
+		EstimatedTotalMs:   5000,
+	}
+	if err := s.save(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"started_at_ms"`) {
+		t.Fatalf("expected snake_case timing fields:\n%s", data)
+	}
+	s2 := &Store{filePath: path}
+	if err := s2.load(); err != nil {
+		t.Fatal(err)
+	}
+	if !s2.BackupTiming.Active() || s2.BackupTiming.StartedAtMs != 1000 || s2.BackupTiming.PackedFilesAtStart != 2 {
+		t.Fatalf("unexpected timing: %+v", s2.BackupTiming)
 	}
 }
