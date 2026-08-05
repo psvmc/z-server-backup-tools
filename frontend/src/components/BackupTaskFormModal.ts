@@ -159,7 +159,6 @@ export function useBackupTaskFormModal(
         Title: "选择本机保存目录",
         CanChooseDirectories: true,
         CanChooseFiles: false,
-        Directory: form.value.local_dir || undefined,
       });
       const path = Array.isArray(picked) ? picked[0] : picked;
       if (path && typeof path === "string") {
