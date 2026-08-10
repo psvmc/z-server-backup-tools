@@ -55,9 +55,37 @@ func (c *Client) RunRemote(argv ...string) (string, error) {
 	return out, err
 }
 
+func (c *Client) RunRemoteWithTimeout(timeout time.Duration, argv ...string) (string, error) {
+	out, _, err := c.RunRemoteWithStderrTimeout(timeout, argv...)
+	return out, err
+}
+
 func (c *Client) RunRemoteWithStderr(argv ...string) (stdout, stderr string, err error) {
 	cmd := BuildRemoteCommand(c.cfg.OSType, c.cfg.RemoteSrv, argv...)
 	return c.run(cmd)
+}
+
+func (c *Client) RunRemoteWithStderrTimeout(timeout time.Duration, argv ...string) (stdout, stderr string, err error) {
+	if timeout <= 0 {
+		return c.RunRemoteWithStderr(argv...)
+	}
+	cmd := BuildRemoteCommand(c.cfg.OSType, c.cfg.RemoteSrv, argv...)
+	type result struct {
+		out, errOut string
+		err         error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		out, errOut, runErr := c.run(cmd)
+		ch <- result{out: out, errOut: errOut, err: runErr}
+	}()
+	select {
+	case r := <-ch:
+		return r.out, r.errOut, r.err
+	case <-time.After(timeout):
+		_ = c.Close()
+		return "", "", fmt.Errorf("SSH 命令超时 (%s)", timeout)
+	}
 }
 
 func (c *Client) RunShell(cmd string) (string, error) {

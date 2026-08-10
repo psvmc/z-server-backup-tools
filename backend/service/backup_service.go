@@ -22,6 +22,8 @@ type BackupService struct {
 	store         *config.Store
 	mu            sync.Mutex
 	remoteQueryMu sync.Mutex
+	remoteOpMu    sync.Mutex
+	remoteOp      string
 	cancel        context.CancelFunc
 	status        model.JobStatus
 	logs          []string
@@ -436,14 +438,47 @@ func (s *BackupService) TestConnection(cfg model.BackupConfig) error {
 	return cli.Close()
 }
 
+func (s *BackupService) tryBeginRemoteOp(name string) bool {
+	s.remoteOpMu.Lock()
+	defer s.remoteOpMu.Unlock()
+	if s.remoteOp != "" {
+		return false
+	}
+	s.remoteOp = name
+	return true
+}
+
+func (s *BackupService) finishRemoteOp() {
+	s.remoteOpMu.Lock()
+	s.remoteOp = ""
+	s.remoteOpMu.Unlock()
+}
+
+func (s *BackupService) updateStatus(fn func(*model.JobStatus)) {
+	s.mu.Lock()
+	fn(&s.status)
+	s.mu.Unlock()
+}
+
 func (s *BackupService) InitRemote(cfg model.BackupConfig) error {
 	prepared, err := s.prepareMultiFileJob(cfg)
 	if err != nil {
 		return err
 	}
+	if !s.tryBeginRemoteOp("init") {
+		return fmt.Errorf("远程操作进行中，请稍候")
+	}
+	go s.runInitRemote(prepared)
+	return nil
+}
+
+func (s *BackupService) runInitRemote(prepared model.BackupConfig) {
+	defer s.finishRemoteOp()
+
 	cli, err := remote.Dial(prepared)
 	if err != nil {
-		return err
+		s.app.Event.Emit("remote-init-error", err.Error())
+		return
 	}
 	defer cli.Close()
 	source := util.NormalizeRemotePathForOS(prepared.RemoteSource, prepared.OSType)
@@ -464,7 +499,8 @@ func (s *BackupService) InitRemote(cfg model.BackupConfig) error {
 		if model.IsLinuxOS(prepared.OSType) {
 			s.appendLog("请确认已放置 zipbak-srv 并 chmod +x")
 		}
-		return err
+		s.app.Event.Emit("remote-init-error", err.Error())
+		return
 	}
 
 	st, err := s.queryRemoteStatusLocked(prepared)
@@ -476,7 +512,8 @@ func (s *BackupService) InitRemote(cfg model.BackupConfig) error {
 		}
 		s.mu.Unlock()
 		s.appendLog("init 完成，但读取远程状态失败: " + err.Error())
-		return nil
+		s.app.Event.Emit("remote-init-done", "ok")
+		return
 	}
 	s.mu.Lock()
 	s.applyRemoteStatus(st, true)
@@ -486,7 +523,7 @@ func (s *BackupService) InitRemote(cfg model.BackupConfig) error {
 	if st.PendingZip != "" {
 		s.appendLog("待处理分卷: " + st.PendingZip)
 	}
-	return nil
+	s.app.Event.Emit("remote-init-done", "ok")
 }
 
 func (s *BackupService) ResetBackupTask(cfg model.BackupConfig) error {
@@ -501,18 +538,31 @@ func (s *BackupService) ResetBackupTask(cfg model.BackupConfig) error {
 	if err != nil {
 		return err
 	}
+	if !s.tryBeginRemoteOp("reset") {
+		return fmt.Errorf("远程操作进行中，请稍候")
+	}
+	go s.runResetBackupTask(prepared)
+	return nil
+}
+
+func (s *BackupService) runResetBackupTask(prepared model.BackupConfig) {
+	defer s.finishRemoteOp()
+
 	cli, err := remote.Dial(prepared)
 	if err != nil {
-		return err
+		s.app.Event.Emit("backup-reset-error", err.Error())
+		return
 	}
 	defer cli.Close()
 	state := util.NormalizeRemotePathForOS(prepared.RemoteState, prepared.OSType)
 	if _, err := cli.RunRemote("reset", "--state", state); err != nil {
-		return err
+		s.app.Event.Emit("backup-reset-error", err.Error())
+		return
 	}
 	st, err := s.queryRemoteStatusLocked(prepared)
 	if err != nil {
-		return err
+		s.app.Event.Emit("backup-reset-error", err.Error())
+		return
 	}
 	s.mu.Lock()
 	s.applyRemoteStatus(st, true)
@@ -525,7 +575,7 @@ func (s *BackupService) ResetBackupTask(cfg model.BackupConfig) error {
 	s.mu.Unlock()
 	s.clearBackupTiming()
 	s.appendLog("任务已重置，下次备份将从第一个文件开始")
-	return nil
+	s.app.Event.Emit("backup-reset-done", "ok")
 }
 
 func (s *BackupService) RefreshRemoteStatus(cfg model.BackupConfig) error {
@@ -536,6 +586,16 @@ func (s *BackupService) RefreshRemoteStatus(cfg model.BackupConfig) error {
 		s.mu.Unlock()
 		return nil
 	}
+	if !s.tryBeginRemoteOp("refresh") {
+		return nil
+	}
+	go s.runRefreshRemoteStatus(prepared)
+	return nil
+}
+
+func (s *BackupService) runRefreshRemoteStatus(prepared model.BackupConfig) {
+	defer s.finishRemoteOp()
+
 	st, err := s.queryRemoteStatusLocked(prepared)
 	if err != nil {
 		s.mu.Lock()
@@ -550,18 +610,18 @@ func (s *BackupService) RefreshRemoteStatus(cfg model.BackupConfig) error {
 			s.status.OversizedFileCount = 0
 		}
 		s.mu.Unlock()
-		return nil
+		s.app.Event.Emit("remote-status-refreshed", "")
+		return
 	}
 	s.mu.Lock()
 	s.applyRemoteStatus(st, false)
 	s.status.RemoteHint = ""
-	if st.Done {
-		s.mu.Unlock()
-		s.clearBackupTiming()
-		return nil
-	}
+	done := st.Done
 	s.mu.Unlock()
-	return nil
+	if done {
+		s.clearBackupTiming()
+	}
+	s.app.Event.Emit("remote-status-refreshed", "")
 }
 
 func (s *BackupService) GetJobStatus() model.JobStatus {
@@ -646,7 +706,7 @@ func (s *BackupService) runPipeline(ctx context.Context, cfg model.BackupConfig)
 		s.beginBackupTiming(packed)
 	}
 
-	pipe := zipbak.NewPipeline(cfg, s.appendLog, &s.status)
+	pipe := zipbak.NewPipeline(cfg, s.appendLog, s.updateStatus)
 	s.appendLog("开始备份流水线")
 	if err := pipe.Run(ctx); err != nil {
 		s.mu.Lock()

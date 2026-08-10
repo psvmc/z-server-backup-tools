@@ -1,11 +1,15 @@
 package service
 
 import (
+	"time"
+
 	"z-server-backup-tools/backend/model"
 	"z-server-backup-tools/backend/remote"
 	"z-server-backup-tools/backend/util"
 	"z-server-backup-tools/backend/zipbak"
 )
+
+const remoteStatusQueryTimeout = 90 * time.Second
 
 func queryRemoteStatus(cfg model.BackupConfig) (zipbak.Status, error) {
 	cli, err := remote.Dial(cfg)
@@ -15,7 +19,7 @@ func queryRemoteStatus(cfg model.BackupConfig) (zipbak.Status, error) {
 	defer cli.Close()
 	state := util.NormalizeRemotePathForOS(cfg.RemoteState, cfg.OSType)
 	maxGB := formatMaxGBFlag(cfg)
-	out, err := cli.RunRemote("status", "--state", state, "--max-gb", maxGB)
+	out, err := cli.RunRemoteWithTimeout(remoteStatusQueryTimeout, "status", "--state", state, "--max-gb", maxGB)
 	if err != nil {
 		return zipbak.Status{}, err
 	}

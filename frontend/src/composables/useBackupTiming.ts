@@ -53,16 +53,35 @@ export function useBackupTiming(status: Ref<JobStatus>) {
   };
 
   watch(
-    () => status.value,
-    (st) => {
-      syncFromStatus(st, backupStartedAt, packedFilesAtStart, estimatedTotalMs);
-      if (st.running) {
+    () =>
+      [
+        status.value.running,
+        status.value.done,
+        status.value.timingStartedAtMs,
+        status.value.timingPackedFilesAtStart,
+        status.value.timingEstimatedTotalMs,
+      ] as const,
+    ([running, done, startedMs, packedAtStart, estimatedMs]) => {
+      syncFromStatus(
+        {
+          ...status.value,
+          running: running ?? false,
+          done: done ?? false,
+          timingStartedAtMs: startedMs ?? 0,
+          timingPackedFilesAtStart: packedAtStart ?? 0,
+          timingEstimatedTotalMs: estimatedMs ?? 0,
+        },
+        backupStartedAt,
+        packedFilesAtStart,
+        estimatedTotalMs,
+      );
+      if (running) {
         startClock();
       } else {
         stopClock();
       }
     },
-    { deep: true, immediate: true },
+    { immediate: true },
   );
 
   watch(

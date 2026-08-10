@@ -25,14 +25,23 @@ const contextCanceledMsg = "任务已取消"
 
 type LogFn func(string)
 
+// StatusUpdateFn applies mutations to job status under the caller's lock.
+type StatusUpdateFn func(fn func(*model.JobStatus))
+
 type Pipeline struct {
-	cfg    model.BackupConfig
-	log    LogFn
-	status *model.JobStatus
+	cfg          model.BackupConfig
+	log          LogFn
+	updateStatus StatusUpdateFn
 }
 
-func NewPipeline(cfg model.BackupConfig, log LogFn, status *model.JobStatus) *Pipeline {
-	return &Pipeline{cfg: cfg, log: log, status: status}
+func NewPipeline(cfg model.BackupConfig, log LogFn, updateStatus StatusUpdateFn) *Pipeline {
+	return &Pipeline{cfg: cfg, log: log, updateStatus: updateStatus}
+}
+
+func (p *Pipeline) withStatus(fn func(*model.JobStatus)) {
+	if p.updateStatus != nil {
+		p.updateStatus(fn)
+	}
 }
 
 func (p *Pipeline) Run(ctx context.Context) error {
@@ -42,8 +51,12 @@ func (p *Pipeline) Run(ctx context.Context) error {
 	if err := retryOp(ctx, "读取远程状态", p.log, p.refreshStatus); err != nil {
 		p.log("读取远程状态失败: " + err.Error())
 	}
-	if strings.TrimSpace(p.status.PendingZip) != "" {
-		p.log("检测到远程待处理分卷，将从断点继续: " + filepath.Base(p.status.PendingZip))
+	var pendingZip string
+	p.withStatus(func(st *model.JobStatus) {
+		pendingZip = st.PendingZip
+	})
+	if strings.TrimSpace(pendingZip) != "" {
+		p.log("检测到远程待处理分卷，将从断点继续: " + filepath.Base(pendingZip))
 	}
 	for {
 		if err := ctx.Err(); err != nil {
@@ -52,7 +65,12 @@ func (p *Pipeline) Run(ctx context.Context) error {
 		if err := retryOp(ctx, "读取远程状态", p.log, p.refreshStatus); err != nil {
 			p.log("读取远程状态失败: " + err.Error())
 		}
-		if p.status.Done && strings.TrimSpace(p.status.PendingZip) == "" {
+		var done bool
+		p.withStatus(func(st *model.JobStatus) {
+			done = st.Done
+			pendingZip = st.PendingZip
+		})
+		if done && strings.TrimSpace(pendingZip) == "" {
 			p.log("全部文件已备份完成")
 			return nil
 		}
@@ -61,18 +79,25 @@ func (p *Pipeline) Run(ctx context.Context) error {
 		zipRemote, err := retryWrap(ctx, "远程打包", p.log, p.remotePack)
 		if err != nil {
 			if strings.Contains(err.Error(), "备份已完成") {
-				p.status.Done = true
+				p.withStatus(func(st *model.JobStatus) {
+					st.Done = true
+				})
 				p.log("备份任务已完成")
 				return nil
 			}
 			return err
 		}
-		p.status.CurrentPart = filepath.Base(zipRemote)
+		partName := filepath.Base(zipRemote)
+		p.withStatus(func(st *model.JobStatus) {
+			st.CurrentPart = partName
+		})
 		p.log("远程已生成: " + zipRemote)
 
 		localName := filepath.Base(zipRemote)
 		localPath := filepath.Join(p.cfg.LocalDir, localName)
-		p.status.LocalFile = localPath
+		p.withStatus(func(st *model.JobStatus) {
+			st.LocalFile = localPath
+		})
 		p.setPhase("download")
 		p.log("开始下载到 " + localPath)
 
@@ -141,12 +166,14 @@ func wrapCancelError(err error) error {
 }
 
 func (p *Pipeline) setPhase(phase string) {
-	p.status.Phase = phase
-	if phase != "download" {
-		p.status.DownloadBytesDone = 0
-		p.status.DownloadBytesTotal = 0
-		p.status.DownloadSpeedBps = 0
-	}
+	p.withStatus(func(st *model.JobStatus) {
+		st.Phase = phase
+		if phase != "download" {
+			st.DownloadBytesDone = 0
+			st.DownloadBytesTotal = 0
+			st.DownloadSpeedBps = 0
+		}
+	})
 }
 
 func (p *Pipeline) maxGBFlag() string {
@@ -217,22 +244,30 @@ func (p *Pipeline) download(ctx context.Context, remotePath, localPath string) e
 	onProgress := func(written, total int64) {
 		progMu.Lock()
 		defer progMu.Unlock()
-		p.status.DownloadBytesDone = written
-		if total > 0 {
-			p.status.DownloadBytesTotal = total
-		}
 		now := time.Now()
+		var speedBps float64
+		updateSpeed := false
 		if lastMark.IsZero() {
 			lastMark = now
 			lastBytes = written
-			return
+		} else {
+			dt := now.Sub(lastMark).Seconds()
+			if dt >= 0.4 {
+				speedBps = float64(written-lastBytes) / dt
+				lastMark = now
+				lastBytes = written
+				updateSpeed = true
+			}
 		}
-		dt := now.Sub(lastMark).Seconds()
-		if dt >= 0.4 {
-			p.status.DownloadSpeedBps = float64(written-lastBytes) / dt
-			lastMark = now
-			lastBytes = written
-		}
+		p.withStatus(func(st *model.JobStatus) {
+			st.DownloadBytesDone = written
+			if total > 0 {
+				st.DownloadBytesTotal = total
+			}
+			if updateSpeed {
+				st.DownloadSpeedBps = speedBps
+			}
+		})
 	}
 
 	return sc.DownloadWithProgress(ctx, remotePath, localPath, 0, onProgress)
@@ -272,14 +307,16 @@ func (p *Pipeline) refreshStatus() error {
 	if err != nil {
 		return err
 	}
-	p.status.TotalFiles = st.TotalFiles
-	p.status.PackedFiles = st.PackedFiles
-	p.status.Done = st.Done
-	p.status.PendingZip = st.PendingZip
-	p.status.PrefetchZip = st.PrefetchZip
-	p.status.MaxFileBytes = st.MaxFileBytes
-	p.status.OversizedFileCount = st.OversizedFileCount
-	p.status.RemoteInited = true
+	p.withStatus(func(job *model.JobStatus) {
+		job.TotalFiles = st.TotalFiles
+		job.PackedFiles = st.PackedFiles
+		job.Done = st.Done
+		job.PendingZip = st.PendingZip
+		job.PrefetchZip = st.PrefetchZip
+		job.MaxFileBytes = st.MaxFileBytes
+		job.OversizedFileCount = st.OversizedFileCount
+		job.RemoteInited = true
+	})
 	return nil
 }
 

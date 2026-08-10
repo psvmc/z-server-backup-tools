@@ -26,6 +26,20 @@ function bindingToPlainServer(srv: ServerBinding): Server {
   return JSON.parse(JSON.stringify(srv)) as Server;
 }
 
+function eventText(ev: unknown): string {
+  if (typeof ev === "string") return ev;
+  return String((ev as { data?: string })?.data ?? "");
+}
+
+const MAX_LOG_LINES = 500;
+
+function appendLogLine(lines: string[], line: string) {
+  if (lines.length >= MAX_LOG_LINES) {
+    lines.shift();
+  }
+  lines.push(line);
+}
+
 export function useBackupJob() {
   const config = ref<BackupConfig>(emptyNotifyConfig());
   const servers = ref<Server[]>([]);
@@ -66,11 +80,16 @@ export function useBackupJob() {
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let remotePollTimer: ReturnType<typeof setInterval> | null = null;
   let remotePullInFlight = false;
+  let resetHide: (() => void) | null = null;
   const unsubs: Array<() => void> = [];
 
   const refreshLocal = async () => {
     status.value = (await BackupService.GetJobStatus()) as JobStatus;
     logs.value = (await BackupService.GetLogs()) as string[];
+  };
+
+  const refreshStatusOnly = async () => {
+    status.value = (await BackupService.GetJobStatus()) as JobStatus;
   };
 
   const pullRemoteSnapshot = async () => {
@@ -79,10 +98,7 @@ export function useBackupJob() {
     remotePullInFlight = true;
     try {
       await BackupService.RefreshRemoteStatus(toBindingConfig(jobConfig.value));
-      await refreshLocal();
     } catch {
-      // 配置未齐、远程忙或不可达时忽略
-    } finally {
       remotePullInFlight = false;
     }
   };
@@ -92,7 +108,7 @@ export function useBackupJob() {
       await pullRemoteSnapshot();
       return;
     }
-    await refreshLocal();
+    await refreshStatusOnly();
   };
 
   const loadServers = async () => {
@@ -112,7 +128,6 @@ export function useBackupJob() {
 
   const loadConfig = async () => {
     const stored = bindingToPlain(BackupConfigBinding.createFrom(await BackupService.GetConfig()));
-    // 全局 backup 仅保留邮件；残留 SSH/远程应用不暴露给 UI，也不进入服务器列表
     config.value = {
       ...emptyNotifyConfig(),
       notify_email: stored.notify_email,
@@ -210,6 +225,17 @@ export function useBackupJob() {
     }
   };
 
+  const showInitSuccess = () => {
+    const s = status.value;
+    if (s.remoteInited && s.totalFiles > 0) {
+      message.success(`远程 init 完成：共 ${s.totalFiles} 个文件，已打包 ${s.packedFiles} 个`);
+    } else if (s.remoteInited) {
+      message.success("远程 init 完成（源目录无文件或已全部完成）");
+    } else {
+      message.success("远程 init 完成");
+    }
+  };
+
   const initRemote = async () => {
     if (remoteInitLoading.value) return;
     if (!jobConfig.value.task_id?.trim()) {
@@ -219,19 +245,9 @@ export function useBackupJob() {
     remoteInitLoading.value = true;
     try {
       await BackupService.InitRemote(toBindingConfig(jobConfig.value));
-      await refreshStatus();
-      const s = status.value;
-      if (s.remoteInited && s.totalFiles > 0) {
-        message.success(`远程 init 完成：共 ${s.totalFiles} 个文件，已打包 ${s.packedFiles} 个`);
-      } else if (s.remoteInited) {
-        message.success("远程 init 完成（源目录无文件或已全部完成）");
-      } else {
-        message.success("远程 init 完成");
-      }
     } catch (err) {
-      message.error(formatError(err));
-    } finally {
       remoteInitLoading.value = false;
+      message.error(formatError(err));
     }
   };
 
@@ -240,14 +256,12 @@ export function useBackupJob() {
       message.warning("请先选择备份任务");
       return;
     }
-    const hide = message.loading("重置任务中...", 0);
+    resetHide = message.loading("重置任务中...", 0);
     try {
       await BackupService.ResetBackupTask(toBindingConfig(jobConfig.value));
-      await refreshStatus();
-      hide();
-      message.success("任务已重置，下次备份将从第一个文件开始");
     } catch (err) {
-      hide();
+      resetHide?.();
+      resetHide = null;
       message.error(formatError(err));
     }
   };
@@ -260,7 +274,7 @@ export function useBackupJob() {
     try {
       await BackupService.StartBackup(toBindingConfig(jobConfig.value));
       message.success("备份流水线已启动");
-      await refreshStatus();
+      await refreshStatusOnly();
     } catch (err) {
       message.error(formatError(err));
     }
@@ -290,13 +304,53 @@ export function useBackupJob() {
     }
     unsubs.push(
       Events.On("backup-log", (ev) => {
-        const line = typeof ev === "string" ? ev : String((ev as { data?: string })?.data ?? "");
-        if (line) logs.value = [...logs.value.slice(-499), line];
+        const line = eventText(ev);
+        if (line) appendLogLine(logs.value, line);
+      }),
+      Events.On("backup-done", () => {
+        void refreshLocal().then(() => message.success("备份已完成"));
+      }),
+      Events.On("backup-error", (ev) => {
+        const msg = eventText(ev);
+        void refreshLocal();
+        if (msg.includes("任务已取消")) {
+          message.info("备份任务已取消");
+        } else {
+          message.error(msg || "备份失败");
+        }
+      }),
+      Events.On("remote-init-done", () => {
+        remoteInitLoading.value = false;
+        void refreshLocal().then(showInitSuccess);
+      }),
+      Events.On("remote-init-error", (ev) => {
+        remoteInitLoading.value = false;
+        void refreshLocal();
+        message.error(formatError(eventText(ev)));
+      }),
+      Events.On("remote-status-refreshed", () => {
+        remotePullInFlight = false;
+        void refreshLocal();
+      }),
+      Events.On("backup-reset-done", () => {
+        resetHide?.();
+        resetHide = null;
+        void refreshLocal();
+        message.success("任务已重置，下次备份将从第一个文件开始");
+      }),
+      Events.On("backup-reset-error", (ev) => {
+        resetHide?.();
+        resetHide = null;
+        message.error(formatError(eventText(ev)));
       }),
     );
     pollTimer = setInterval(() => {
-      void refreshLocal();
-    }, 1500);
+      if (status.value.running) {
+        void refreshStatusOnly();
+      } else {
+        void refreshLocal();
+      }
+    }, 2000);
     remotePollTimer = setInterval(() => {
       void pullRemoteSnapshot();
     }, 10000);
