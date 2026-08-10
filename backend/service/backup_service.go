@@ -625,6 +625,9 @@ func (s *BackupService) runPipeline(ctx context.Context, cfg model.BackupConfig)
 	defer func() {
 		defaultJobGate.ReleaseMulti()
 		s.mu.Lock()
+		if cancel := s.cancel; cancel != nil {
+			cancel()
+		}
 		s.status.Running = false
 		s.cancel = nil
 		s.mu.Unlock()

@@ -66,6 +66,8 @@ func SendTestEmail(cfg model.BackupConfig) error {
 	return sendConfiguredMail(cfg, to, subject, body)
 }
 
+const mailFromDisplayName = "服务器文件备份"
+
 func sendConfiguredMail(cfg model.BackupConfig, to, subject, body string) error {
 	host := strings.TrimSpace(cfg.SmtpHost)
 	if host == "" {
@@ -77,13 +79,13 @@ func sendConfiguredMail(cfg model.BackupConfig, to, subject, body string) error 
 	}
 	user := strings.TrimSpace(cfg.SmtpUser)
 	pass := cfg.SmtpPassword
-	from := user
-	if from == "" {
-		from = to
+	fromAddr := user
+	if fromAddr == "" {
+		fromAddr = to
 	}
-	msg := buildMIME(from, to, subject, body)
+	msg := buildMIME(formatFromHeader(fromAddr, mailFromDisplayName), to, subject, body)
 	addr := fmt.Sprintf("%s:%d", host, port)
-	return sendMail(addr, host, port, user, pass, from, []string{to}, msg)
+	return sendMail(addr, host, port, user, pass, fromAddr, []string{to}, msg)
 }
 
 func buildMessage(r BackupResult) (subject, body string) {
@@ -122,6 +124,20 @@ func encodeSubject(s string) string {
 		}
 	}
 	return s
+}
+
+// formatFromHeader builds a MIME From value with a human-readable display name.
+// SMTP envelope still uses the bare email address separately.
+func formatFromHeader(email, displayName string) string {
+	email = strings.TrimSpace(email)
+	displayName = strings.TrimSpace(displayName)
+	if email == "" {
+		return displayName
+	}
+	if displayName == "" {
+		return email
+	}
+	return encodeSubject(displayName) + " <" + email + ">"
 }
 
 func buildMIME(from, to, subject, body string) []byte {

@@ -37,7 +37,12 @@ const { mailTesting, testEmail } = useBackupConfigPanel(config, props);
             />
           </a-form-item>
           <a-form-item label="SMTP 用户名">
-            <a-input v-model:value="config.smtp_user" autocomplete="off" allow-clear />
+            <a-input
+              v-model:value="config.smtp_user"
+              placeholder="QQ 邮箱填完整地址，如 xxx@qq.com"
+              autocomplete="off"
+              allow-clear
+            />
           </a-form-item>
           <a-form-item label="SMTP 密码">
             <a-input-password v-model:value="config.smtp_password" autocomplete="off" />

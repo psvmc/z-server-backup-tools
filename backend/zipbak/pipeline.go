@@ -76,16 +76,19 @@ func (p *Pipeline) Run(ctx context.Context) error {
 		p.setPhase("download")
 		p.log("开始下载到 " + localPath)
 
+		iterCtx, iterCancel := context.WithCancel(ctx)
 		var prefetchWG sync.WaitGroup
 		prefetchWG.Add(1)
 		go func() {
 			defer prefetchWG.Done()
-			if err := ctx.Err(); err != nil {
+			if err := iterCtx.Err(); err != nil {
 				return
 			}
-			ahead, err := retryWrap(ctx, "预打包下一卷", p.log, p.remotePackAhead)
+			ahead, err := retryWrap(iterCtx, "预打包下一卷", p.log, p.remotePackAhead)
 			if err != nil {
-				p.log("预打包下一卷失败: " + err.Error())
+				if iterCtx.Err() == nil {
+					p.log("预打包下一卷失败: " + err.Error())
+				}
 				return
 			}
 			if strings.TrimSpace(ahead) != "" {
@@ -93,23 +96,17 @@ func (p *Pipeline) Run(ctx context.Context) error {
 			}
 		}()
 
-		if err := retryOp(ctx, "下载分卷", p.log, func() error {
-			return p.download(ctx, zipRemote, localPath)
+		if err := retryOp(iterCtx, "下载分卷", p.log, func() error {
+			return p.download(iterCtx, zipRemote, localPath)
 		}); err != nil {
+			iterCancel()
+			prefetchWG.Wait()
 			return wrapCancelError(err)
 		}
 		p.log("下载完成")
 
-		prefetchDone := make(chan struct{})
-		go func() {
-			prefetchWG.Wait()
-			close(prefetchDone)
-		}()
-		select {
-		case <-ctx.Done():
-			return wrapCancelError(ctx.Err())
-		case <-prefetchDone:
-		}
+		iterCancel()
+		prefetchWG.Wait()
 
 		// 下载完成后校验文件哈希
 		p.setPhase("verify")
@@ -316,6 +313,8 @@ func isConnError(err error) bool {
 	return strings.Contains(msg, "connection lost") ||
 		strings.Contains(msg, "connection closed") ||
 		strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "forcibly closed") ||
+		strings.Contains(msg, "wsarecv") ||
 		strings.Contains(msg, "i/o timeout") ||
 		strings.Contains(msg, "eof") ||
 		strings.Contains(msg, "ssh: handshake failed") ||

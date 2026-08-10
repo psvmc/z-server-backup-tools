@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
@@ -26,6 +27,7 @@ func Dial(cfg model.BackupConfig) (*Client, error) {
 		User:            cfg.User,
 		Auth:            []ssh.AuthMethod{ssh.Password(cfg.Password)},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         30 * time.Second,
 	}
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	if strings.TrimSpace(cfg.Host) == "" {
