@@ -10,6 +10,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"z-server-backup-tools/backend/model"
+	"z-server-backup-tools/backend/sshdial"
 )
 
 type Client struct {
@@ -36,11 +37,18 @@ func Dial(cfg model.BackupConfig) (*Client, error) {
 		return nil, fmt.Errorf("SSH 主机为空，请填写主机地址")
 	}
 	addr := net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", cfg.Port))
+	release := sshdial.Acquire(addr)
 	client, err := ssh.Dial("tcp", addr, sshCfg)
+	release()
 	if err != nil {
 		return nil, fmt.Errorf("SSH 连接失败: %w", err)
 	}
 	return &Client{cfg: cfg, client: client}, nil
+}
+
+// SSHConn 返回底层 SSH 连接，供 SFTP 等同连接复用。
+func (c *Client) SSHConn() *ssh.Client {
+	return c.client
 }
 
 func (c *Client) Close() error {

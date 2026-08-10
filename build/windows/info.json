@@ -1,10 +1,10 @@
 {
 	"fixed": {
-		"file_version": "1.0.10"
+		"file_version": "1.0.11"
 	},
 	"info": {
 		"0000": {
-			"ProductVersion": "1.0.10",
+			"ProductVersion": "1.0.11",
 			"CompanyName": "Z",
 			"FileDescription": "远程 Windows 分卷 zip 流水线备份客户端",
 			"LegalCopyright": "(c) 2026, Z",

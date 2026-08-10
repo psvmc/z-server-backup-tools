@@ -13,6 +13,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"z-server-backup-tools/backend/model"
+	"z-server-backup-tools/backend/sshdial"
 )
 
 type Client struct {
@@ -33,13 +34,19 @@ func Dial(cfg model.BackupConfig) (*Client, error) {
 	if strings.TrimSpace(cfg.Host) == "" {
 		return nil, fmt.Errorf("SSH 主机为空，请填写主机地址")
 	}
+	release := sshdial.Acquire(addr)
 	conn, err := ssh.Dial("tcp", addr, sshCfg)
+	release()
 	if err != nil {
 		return nil, fmt.Errorf("SSH 连接失败: %w", err)
 	}
+	return NewFromConn(conn)
+}
+
+// NewFromConn 基于已有 SSH 连接创建 SFTP 客户端（不关闭底层 conn）。
+func NewFromConn(conn *ssh.Client) (*Client, error) {
 	sc, err := sftp.NewClient(conn)
 	if err != nil {
-		conn.Close()
 		return nil, err
 	}
 	return &Client{sftp: sc}, nil
@@ -47,6 +54,15 @@ func Dial(cfg model.BackupConfig) (*Client, error) {
 
 func (c *Client) Close() error {
 	return c.sftp.Close()
+}
+
+// RemoveOnConn 在已有 SSH 连接上删除远程文件，不关闭底层连接。
+func RemoveOnConn(conn *ssh.Client, remotePath string) error {
+	sc, err := sftp.NewClient(conn)
+	if err != nil {
+		return err
+	}
+	return sc.Remove(remotePath)
 }
 
 func (c *Client) Download(ctx context.Context, remotePath, localPath string) error {

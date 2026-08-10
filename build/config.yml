@@ -9,7 +9,7 @@ info:
   description: "远程 Windows 分卷 zip 流水线备份客户端"
   copyright: "(c) 2026, Z"
   comments: "SFTP zip backup pipeline client"
-  version: "1.0.10"
+  version: "1.0.11"
 
 # 前端改动由 Vite HMR 热更新（不关窗口）；仅 Go 改动才重建并重启应用
 dev_mode:

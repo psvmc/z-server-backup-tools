@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	maxRetries    = 3
-	retryBaseWait = 2 * time.Second
-	retryMaxWait  = 10 * time.Second
+	maxRetries    = 6
+	retryBaseWait = 3 * time.Second
+	retryMaxWait  = 30 * time.Second
 )
 
 // contextCanceledMsg 用于将 context.Canceled 包装为友好的中文提示
@@ -92,6 +92,9 @@ func (p *Pipeline) Run(ctx context.Context) error {
 			st.CurrentPart = partName
 		})
 		p.log("远程已生成: " + zipRemote)
+		if err := p.refreshStatus(); err != nil {
+			p.log("读取远程状态失败: " + err.Error())
+		}
 
 		localName := filepath.Base(zipRemote)
 		localPath := filepath.Join(p.cfg.LocalDir, localName)
@@ -102,23 +105,19 @@ func (p *Pipeline) Run(ctx context.Context) error {
 		p.log("开始下载到 " + localPath)
 
 		iterCtx, iterCancel := context.WithCancel(ctx)
+		defer iterCancel()
+
+		prefetchCh := make(chan prefetchOutcome, 1)
 		var prefetchWG sync.WaitGroup
 		prefetchWG.Add(1)
 		go func() {
 			defer prefetchWG.Done()
 			if err := iterCtx.Err(); err != nil {
+				prefetchCh <- prefetchOutcome{err: err}
 				return
 			}
 			ahead, err := retryWrap(iterCtx, "预打包下一卷", p.log, p.remotePackAhead)
-			if err != nil {
-				if iterCtx.Err() == nil {
-					p.log("预打包下一卷失败: " + err.Error())
-				}
-				return
-			}
-			if strings.TrimSpace(ahead) != "" {
-				p.log("远程已预打包下一卷: " + filepath.Base(ahead))
-			}
+			prefetchCh <- prefetchOutcome{ahead: strings.TrimSpace(ahead), err: err}
 		}()
 
 		if err := retryOp(iterCtx, "下载分卷", p.log, func() error {
@@ -128,9 +127,24 @@ func (p *Pipeline) Run(ctx context.Context) error {
 			prefetchWG.Wait()
 			return wrapCancelError(err)
 		}
-		p.log("下载完成")
+		p.log("下载" + partName + "完成")
 
-		iterCancel()
+		var hasMoreVolumes bool
+		p.withStatus(func(st *model.JobStatus) {
+			hasMoreVolumes = st.TotalFiles > 0 && st.PackedFiles < st.TotalFiles
+		})
+		if hasMoreVolumes {
+			select {
+			case outcome := <-prefetchCh:
+				p.logPrefetchOutcome(outcome)
+			default:
+				p.log("等待远程打包")
+				outcome := <-prefetchCh
+				p.logPrefetchOutcome(outcome)
+			}
+		} else {
+			<-prefetchCh
+		}
 		prefetchWG.Wait()
 
 		// 下载完成后校验文件哈希
@@ -142,18 +156,12 @@ func (p *Pipeline) Run(ctx context.Context) error {
 		p.log("哈希校验通过")
 
 		p.setPhase("delete")
-		if err := retryOp(ctx, "删除远程分卷", p.log, func() error {
-			return p.deleteRemote(zipRemote)
+		if err := retryOp(ctx, "删除远程分卷并确认 ack", p.log, func() error {
+			return p.deleteRemoteAndAck(zipRemote)
 		}); err != nil {
 			return err
 		}
-		p.log("已删除远程 zip")
-
-		p.setPhase("ack")
-		if err := retryOp(ctx, "确认 ack", p.log, p.remoteAck); err != nil {
-			return err
-		}
-		p.log("已确认 ack，继续下一卷")
+		p.log("已删除远程 zip 并确认 ack，继续下一卷")
 	}
 }
 
@@ -163,6 +171,23 @@ func wrapCancelError(err error) error {
 		return fmt.Errorf(contextCanceledMsg)
 	}
 	return err
+}
+
+type prefetchOutcome struct {
+	ahead string
+	err   error
+}
+
+func (p *Pipeline) logPrefetchOutcome(outcome prefetchOutcome) {
+	if outcome.err != nil {
+		if outcome.err != context.Canceled {
+			p.log("预打包下一卷失败: " + outcome.err.Error())
+		}
+		return
+	}
+	if outcome.ahead != "" {
+		p.log("远程已预打包下一卷: " + filepath.Base(outcome.ahead))
+	}
 }
 
 func (p *Pipeline) setPhase(phase string) {
@@ -218,12 +243,17 @@ func (p *Pipeline) remotePackAhead() (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-func (p *Pipeline) remoteAck() error {
+func (p *Pipeline) deleteRemoteAndAck(zipRemote string) error {
 	cli, err := remote.Dial(p.cfg)
 	if err != nil {
 		return err
 	}
 	defer cli.Close()
+	remotePath := util.NormalizeRemotePathForOS(zipRemote, p.cfg.OSType)
+	if err := sftpclient.RemoveOnConn(cli.SSHConn(), remotePath); err != nil {
+		return err
+	}
+	p.setPhase("ack")
 	state := util.NormalizeRemotePathForOS(p.cfg.RemoteState, p.cfg.OSType)
 	_, err = cli.RunRemote("ack", "--state", state)
 	return err
@@ -281,15 +311,6 @@ func (p *Pipeline) verifyHash(localPath string) error {
 	p.log("本地文件 SHA256: " + hash)
 	// 当前远程不返回哈希，所以只计算并记录。未来可扩展为对比远程哈希。
 	return nil
-}
-
-func (p *Pipeline) deleteRemote(remotePath string) error {
-	sc, err := sftpclient.Dial(p.cfg)
-	if err != nil {
-		return err
-	}
-	defer sc.Close()
-	return sc.Remove(util.NormalizeRemotePathForOS(remotePath, p.cfg.OSType))
 }
 
 func (p *Pipeline) refreshStatus() error {
