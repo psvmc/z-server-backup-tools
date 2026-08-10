@@ -104,27 +104,9 @@ func (p *Pipeline) Run(ctx context.Context) error {
 		p.setPhase("download")
 		p.log("开始下载到 " + localPath)
 
-		iterCtx, iterCancel := context.WithCancel(ctx)
-		defer iterCancel()
-
-		prefetchCh := make(chan prefetchOutcome, 1)
-		var prefetchWG sync.WaitGroup
-		prefetchWG.Add(1)
-		go func() {
-			defer prefetchWG.Done()
-			if err := iterCtx.Err(); err != nil {
-				prefetchCh <- prefetchOutcome{err: err}
-				return
-			}
-			ahead, err := retryWrap(iterCtx, "预打包下一卷", p.log, p.remotePackAhead)
-			prefetchCh <- prefetchOutcome{ahead: strings.TrimSpace(ahead), err: err}
-		}()
-
-		if err := retryOp(iterCtx, "下载分卷", p.log, func() error {
-			return p.download(iterCtx, zipRemote, localPath)
+		if err := retryOp(ctx, "下载分卷", p.log, func() error {
+			return p.download(ctx, zipRemote, localPath)
 		}); err != nil {
-			iterCancel()
-			prefetchWG.Wait()
 			return wrapCancelError(err)
 		}
 		p.log("下载" + partName + "完成")
@@ -134,18 +116,10 @@ func (p *Pipeline) Run(ctx context.Context) error {
 			hasMoreVolumes = st.TotalFiles > 0 && st.PackedFiles < st.TotalFiles
 		})
 		if hasMoreVolumes {
-			select {
-			case outcome := <-prefetchCh:
-				p.logPrefetchOutcome(outcome)
-			default:
-				p.log("等待远程打包")
-				outcome := <-prefetchCh
-				p.logPrefetchOutcome(outcome)
-			}
-		} else {
-			<-prefetchCh
+			p.log("等待远程打包")
+			ahead, err := retryWrap(ctx, "预打包下一卷", p.log, p.remotePackAhead)
+			p.logPrefetchOutcome(prefetchOutcome{ahead: strings.TrimSpace(ahead), err: err})
 		}
-		prefetchWG.Wait()
 
 		// 下载完成后校验文件哈希
 		p.setPhase("verify")
