@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +18,7 @@ import (
 )
 
 type Client struct {
+	ssh  *ssh.Client // Dial 创建时持有，Close 时一并关闭；NewFromConn 为 nil
 	sftp *sftp.Client
 }
 
@@ -30,17 +32,23 @@ func Dial(cfg model.BackupConfig) (*Client, error) {
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         30 * time.Second,
 	}
-	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	if strings.TrimSpace(cfg.Host) == "" {
 		return nil, fmt.Errorf("SSH 主机为空，请填写主机地址")
 	}
+	addr := net.JoinHostPort(cfg.Host, fmt.Sprintf("%d", cfg.Port))
 	release := sshdial.Acquire(addr)
 	conn, err := ssh.Dial("tcp", addr, sshCfg)
 	release()
 	if err != nil {
+		sshdial.NoteFailure(addr)
 		return nil, fmt.Errorf("SSH 连接失败: %w", err)
 	}
-	return NewFromConn(conn)
+	sc, err := sftp.NewClient(conn)
+	if err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	return &Client{ssh: conn, sftp: sc}, nil
 }
 
 // NewFromConn 基于已有 SSH 连接创建 SFTP 客户端（不关闭底层 conn）。
@@ -53,7 +61,20 @@ func NewFromConn(conn *ssh.Client) (*Client, error) {
 }
 
 func (c *Client) Close() error {
-	return c.sftp.Close()
+	var first error
+	if c.sftp != nil {
+		if err := c.sftp.Close(); err != nil && first == nil {
+			first = err
+		}
+		c.sftp = nil
+	}
+	if c.ssh != nil {
+		if err := c.ssh.Close(); err != nil && first == nil {
+			first = err
+		}
+		c.ssh = nil
+	}
+	return first
 }
 
 // RemoveOnConn 在已有 SSH 连接上删除远程文件，不关闭底层连接。
@@ -62,6 +83,7 @@ func RemoveOnConn(conn *ssh.Client, remotePath string) error {
 	if err != nil {
 		return err
 	}
+	defer sc.Close()
 	return sc.Remove(remotePath)
 }
 

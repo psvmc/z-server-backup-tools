@@ -41,6 +41,7 @@ func Dial(cfg model.BackupConfig) (*Client, error) {
 	client, err := ssh.Dial("tcp", addr, sshCfg)
 	release()
 	if err != nil {
+		sshdial.NoteFailure(addr)
 		return nil, fmt.Errorf("SSH 连接失败: %w", err)
 	}
 	return &Client{cfg: cfg, client: client}, nil
