@@ -8,10 +8,16 @@ func TestJobGateMutex(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := g.TryAcquireSingle(); err == nil {
-		t.Fatal("expected conflict")
+		t.Fatal("expected conflict with multi")
+	}
+	if err := g.TryAcquireFolderZip(); err == nil {
+		t.Fatal("expected conflict with multi")
 	}
 	g.ReleaseMulti()
 	if err := g.TryAcquireSingle(); err != nil {
 		t.Fatal(err)
+	}
+	if err := g.TryAcquireFolderZip(); err == nil {
+		t.Fatal("expected conflict with single")
 	}
 }

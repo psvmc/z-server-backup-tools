@@ -85,7 +85,7 @@ const {
           <a-alert
             v-if="disabledByOtherJob && !status.running"
             type="warning"
-            message="多文件备份正在运行，请等待结束后再开始单文件下载"
+            message="其他备份任务正在运行，请等待结束后再开始单文件下载"
             show-icon
             class="text-xs"
           />

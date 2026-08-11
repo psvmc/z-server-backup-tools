@@ -41,4 +41,6 @@ type JobStatus struct {
 	DownloadBytesDone        int64   `json:"downloadBytesDone,omitempty"`
 	DownloadBytesTotal       int64   `json:"downloadBytesTotal,omitempty"`
 	DownloadSpeedBps         float64 `json:"downloadSpeedBps,omitempty"`
+	QueueIndex               int     `json:"queueIndex,omitempty"`
+	QueueTotal               int     `json:"queueTotal,omitempty"`
 }

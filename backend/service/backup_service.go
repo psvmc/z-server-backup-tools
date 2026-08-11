@@ -218,6 +218,17 @@ func validateBackupTask(servers []model.Server, t model.BackupTask) error {
 			return fmt.Errorf("任务 %s 的本机保存目录不能为空", t.DisplayName())
 		}
 		return nil
+	case "folder_zip":
+		if t.RemoteSource == "" {
+			return fmt.Errorf("任务 %s 的远程文件夹不能为空", t.DisplayName())
+		}
+		if t.LocalDir == "" {
+			return fmt.Errorf("任务 %s 的本机保存目录不能为空", t.DisplayName())
+		}
+		if _, err := util.CompileIgnorePatterns(t.IgnorePatterns); err != nil {
+			return fmt.Errorf("任务 %s %w", t.DisplayName(), err)
+		}
+		return nil
 	default:
 		if !srv.SupportMultiFile {
 			return fmt.Errorf("任务 %s 所选服务器不支持多文件备份", t.DisplayName())
@@ -247,10 +258,15 @@ func (s *BackupService) SaveTasks(tasks []model.BackupTask) error {
 		t.LocalDir = strings.TrimSpace(t.LocalDir)
 		kind := t.NormalizedKind()
 		t.Kind = kind
-		if kind == "single" {
+		if kind == "single" || kind == "folder_zip" {
 			t.PartNamePrefix = ""
 		} else {
 			t.PartNamePrefix = zipbak.SanitizePartPrefix(t.PartNamePrefix)
+		}
+		if kind == "folder_zip" {
+			t.IgnorePatterns = util.NormalizeIgnorePatterns(t.IgnorePatterns)
+		} else {
+			t.IgnorePatterns = nil
 		}
 		if err := validateBackupTask(servers, t); err != nil {
 			return err
@@ -319,6 +335,32 @@ func (s *BackupService) SetActiveSingleFileTaskID(taskID string) error {
 	return fmt.Errorf("任务不存在: %s", taskID)
 }
 
+func (s *BackupService) GetActiveFolderZipTaskID() string {
+	if s.store == nil {
+		return ""
+	}
+	return s.store.GetActiveFolderZipTaskID()
+}
+
+func (s *BackupService) SetActiveFolderZipTaskID(taskID string) error {
+	if s.store == nil {
+		return fmt.Errorf("配置存储不可用")
+	}
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return s.store.SetActiveFolderZipTaskID("")
+	}
+	for _, t := range s.store.GetBackupTasks() {
+		if t.ID == taskID {
+			if t.NormalizedKind() != "folder_zip" {
+				return fmt.Errorf("任务 %s 不是文件夹压缩备份任务", t.DisplayName())
+			}
+			return s.store.SetActiveFolderZipTaskID(taskID)
+		}
+	}
+	return fmt.Errorf("任务不存在: %s", taskID)
+}
+
 func (s *BackupService) reconcileActiveIDs(tasks []model.BackupTask) error {
 	if s.store == nil {
 		return nil
@@ -363,6 +405,28 @@ func (s *BackupService) reconcileActiveIDs(tasks []model.BackupTask) error {
 				}
 			}
 			if err := s.store.SetActiveSingleFileTaskID(replacement); err != nil {
+				return err
+			}
+		}
+	}
+	activeFolderZip := s.store.GetActiveFolderZipTaskID()
+	if activeFolderZip != "" {
+		valid := false
+		for _, t := range tasks {
+			if t.ID == activeFolderZip && t.NormalizedKind() == "folder_zip" {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			replacement := ""
+			for _, t := range tasks {
+				if t.NormalizedKind() == "folder_zip" {
+					replacement = t.ID
+					break
+				}
+			}
+			if err := s.store.SetActiveFolderZipTaskID(replacement); err != nil {
 				return err
 			}
 		}

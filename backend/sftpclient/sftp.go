@@ -142,3 +142,14 @@ func (c *Client) DownloadWithProgress(ctx context.Context, remotePath, localPath
 func (c *Client) Remove(remotePath string) error {
 	return c.sftp.Remove(remotePath)
 }
+
+// WriteRemoteFile creates or overwrites a remote file with the given content.
+func (c *Client) WriteRemoteFile(remotePath string, data []byte) error {
+	f, err := c.sftp.Create(remotePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	_, err = f.Write(data)
+	return err
+}

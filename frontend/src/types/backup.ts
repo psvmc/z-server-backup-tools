@@ -34,7 +34,7 @@ export interface Server {
   max_part_gb?: number;
 }
 
-export type BackupTaskKind = "multi" | "single";
+export type BackupTaskKind = "multi" | "single" | "folder_zip";
 
 export interface BackupTask {
   id: string;
@@ -44,10 +44,13 @@ export interface BackupTask {
   remote_source: string;
   local_dir: string;
   part_name_prefix?: string;
+  ignore_patterns?: string[];
 }
 
 export function taskKind(task: Pick<BackupTask, "kind">): BackupTaskKind {
-  return task.kind === "single" ? "single" : "multi";
+  if (task.kind === "single") return "single";
+  if (task.kind === "folder_zip") return "folder_zip";
+  return "multi";
 }
 
 export function isMultiTask(task: Pick<BackupTask, "kind">): boolean {
@@ -56,6 +59,18 @@ export function isMultiTask(task: Pick<BackupTask, "kind">): boolean {
 
 export function isSingleTask(task: Pick<BackupTask, "kind">): boolean {
   return taskKind(task) === "single";
+}
+
+export function isFolderZipTask(task: Pick<BackupTask, "kind">): boolean {
+  return taskKind(task) === "folder_zip";
+}
+
+export function isFolderZipTaskRunnable(task: BackupTask): boolean {
+  return !!(
+    task.server_id?.trim() &&
+    task.remote_source?.trim() &&
+    task.local_dir?.trim()
+  );
 }
 
 export interface SingleFileConfig {
@@ -85,6 +100,8 @@ export interface JobStatus {
   downloadBytesDone?: number;
   downloadBytesTotal?: number;
   downloadSpeedBps?: number;
+  queueIndex?: number;
+  queueTotal?: number;
 }
 
 export type LocalPartState = "downloaded" | "downloading";

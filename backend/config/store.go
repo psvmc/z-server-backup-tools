@@ -20,6 +20,7 @@ type diskConfig struct {
 	BackupTasks            []model.BackupTask        `json:"backup_tasks,omitempty"`
 	ActiveTaskID           string                    `json:"active_task_id,omitempty"`
 	ActiveSingleFileTaskID string                    `json:"active_single_file_task_id,omitempty"`
+	ActiveFolderZipTaskID  string                    `json:"active_folder_zip_task_id,omitempty"`
 	BackupTiming           model.BackupTimingSession `json:"backup_timing,omitempty"`
 }
 
@@ -32,6 +33,7 @@ type Store struct {
 	BackupTasks            []model.BackupTask
 	ActiveTaskID           string
 	ActiveSingleFileTaskID string
+	ActiveFolderZipTaskID  string
 	BackupTiming           model.BackupTimingSession
 }
 
@@ -85,6 +87,7 @@ func (s *Store) load() error {
 	s.BackupTasks = payload.BackupTasks
 	s.ActiveTaskID = payload.ActiveTaskID
 	s.ActiveSingleFileTaskID = payload.ActiveSingleFileTaskID
+	s.ActiveFolderZipTaskID = payload.ActiveFolderZipTaskID
 	s.BackupTiming = payload.BackupTiming
 	return nil
 }
@@ -97,6 +100,7 @@ func (s *Store) save() error {
 		BackupTasks:            s.BackupTasks,
 		ActiveTaskID:           s.ActiveTaskID,
 		ActiveSingleFileTaskID: s.ActiveSingleFileTaskID,
+		ActiveFolderZipTaskID:  s.ActiveFolderZipTaskID,
 		BackupTiming:           s.BackupTiming,
 	}
 	data, err := json.MarshalIndent(payload, "", "  ")
@@ -219,6 +223,22 @@ func (s *Store) SetActiveSingleFileTaskID(id string) error {
 		return err
 	}
 	s.ActiveSingleFileTaskID = strings.TrimSpace(id)
+	return s.save()
+}
+
+func (s *Store) GetActiveFolderZipTaskID() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return strings.TrimSpace(s.ActiveFolderZipTaskID)
+}
+
+func (s *Store) SetActiveFolderZipTaskID(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.load(); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	s.ActiveFolderZipTaskID = strings.TrimSpace(id)
 	return s.save()
 }
 

@@ -6,11 +6,12 @@ import "strings"
 type BackupTask struct {
 	ID             string `json:"id"`
 	Name           string `json:"name,omitempty"`
-	Kind           string `json:"kind,omitempty"` // "multi" | "single"; empty = multi
+	Kind           string `json:"kind,omitempty"` // "multi" | "single" | "folder_zip"; empty = multi
 	ServerID       string `json:"server_id,omitempty"`
 	RemoteSource   string `json:"remote_source"`
-	LocalDir       string `json:"local_dir"`
-	PartNamePrefix string `json:"part_name_prefix,omitempty"`
+	LocalDir       string   `json:"local_dir"`
+	PartNamePrefix string   `json:"part_name_prefix,omitempty"`
+	IgnorePatterns []string `json:"ignore_patterns,omitempty"` // folder_zip: filename/path regex excludes
 }
 
 func (t BackupTask) DisplayName() string {
@@ -27,6 +28,8 @@ func (t BackupTask) NormalizedKind() string {
 	switch strings.ToLower(strings.TrimSpace(t.Kind)) {
 	case "single":
 		return "single"
+	case "folder_zip":
+		return "folder_zip"
 	default:
 		return "multi"
 	}

@@ -54,6 +54,28 @@ func SendSingleFileNotification(cfg model.BackupConfig, success bool, remoteFile
 	return sendConfiguredMail(cfg, to, subject, body)
 }
 
+// SendFolderZipNotification emails when a folder zip backup finishes or fails.
+func SendFolderZipNotification(cfg model.BackupConfig, success bool, remoteFolder, localPath, errMsg string) error {
+	to := strings.TrimSpace(cfg.NotifyEmail)
+	if to == "" {
+		return nil
+	}
+	host := strings.TrimSpace(cfg.Host)
+	if host == "" {
+		host = "（未知）"
+	}
+	now := time.Now().Format("2006-01-02 15:04:05")
+	var subject, body string
+	if success {
+		subject = fmt.Sprintf("[文件夹压缩备份完成] %s", host)
+		body = fmt.Sprintf("文件夹压缩备份已完成。\n\n时间：%s\n主机：%s\n远程文件夹：%s\n本机压缩包：%s\n", now, host, remoteFolder, localPath)
+	} else {
+		subject = fmt.Sprintf("[文件夹压缩备份异常] %s", host)
+		body = fmt.Sprintf("文件夹压缩备份异常停止。\n\n时间：%s\n主机：%s\n远程文件夹：%s\n本机压缩包：%s\n错误：%s\n", now, host, remoteFolder, localPath, errMsg)
+	}
+	return sendConfiguredMail(cfg, to, subject, body)
+}
+
 // SendTestEmail sends a simple test message using the configured SMTP settings.
 func SendTestEmail(cfg model.BackupConfig) error {
 	to := strings.TrimSpace(cfg.NotifyEmail)

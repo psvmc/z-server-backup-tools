@@ -70,6 +70,11 @@ const variantColumnSpecs: Record<BackupTaskKind, TaskColumnSpec[]> = {
     { title: "远程源文件", dataIndex: "remote_source", key: "remote_source", bounds: sharedColumnBounds.remote_source },
     { title: "本机目录", dataIndex: "local_dir", key: "local_dir", bounds: sharedColumnBounds.local_dir },
   ],
+  folder_zip: [
+    { title: "任务", dataIndex: "name", key: "name", bounds: sharedColumnBounds.name },
+    { title: "远程文件夹", dataIndex: "remote_source", key: "remote_source", bounds: sharedColumnBounds.remote_source },
+    { title: "本机目录", dataIndex: "local_dir", key: "local_dir", bounds: sharedColumnBounds.local_dir },
+  ],
   multi: [
     { title: "任务", dataIndex: "name", key: "name", bounds: sharedColumnBounds.name },
     { title: "远程源目录", dataIndex: "remote_source", key: "remote_source", bounds: sharedColumnBounds.remote_source },

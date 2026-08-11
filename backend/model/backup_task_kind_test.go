@@ -12,6 +12,9 @@ func TestBackupTaskNormalizedKind(t *testing.T) {
 	if (BackupTask{Kind: "single"}).NormalizedKind() != "single" {
 		t.Fatal("single")
 	}
+	if (BackupTask{Kind: "folder_zip"}).NormalizedKind() != "folder_zip" {
+		t.Fatal("folder_zip")
+	}
 	if (BackupTask{Kind: "other"}).NormalizedKind() != "multi" {
 		t.Fatal("unknown -> multi")
 	}

@@ -18,6 +18,8 @@ const {
   saving,
   isEdit,
   isMulti,
+  isFolderZip,
+  ignorePatterns,
   serverOptions,
   connectionForPicker,
   remotePickerMode,
@@ -71,6 +73,18 @@ const {
           allow-clear
         />
         <div class="text-xs text-gray-500 mt-1">修改前缀后需重新对该任务执行远程 init</div>
+      </a-form-item>
+      <a-form-item v-if="isFolderZip" label="忽略文件名（可选）">
+        <a-select
+          v-model:value="ignorePatterns"
+          mode="tags"
+          :token-separators="[',']"
+          placeholder="输入后按回车确认，如 *log.txt*"
+          allow-clear
+        />
+        <div class="text-xs text-gray-500 mt-1">
+          支持通配符 * ?（*log.txt* 匹配含 log.txt 的文件名，不区分大小写）或正则；输入后请按回车添加规则。
+        </div>
       </a-form-item>
       <a-form-item label="本机保存目录">
         <PathPickInput

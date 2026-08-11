@@ -5,6 +5,7 @@ import { BackupService } from "../../bindings/z-server-backup-tools/backend/serv
 import type { BackupConfig, BackupTask, BackupTaskKind, Server } from "../types/backup";
 import { applyServer, emptyNotifyConfig, newTaskId } from "../types/backup";
 import { formatError } from "../types/update";
+import { validateIgnorePatterns } from "../utils/ignorePatterns";
 import type { RemotePickerMode } from "./RemoteDirPickerModal";
 
 export const backupTaskFormModalProps = {
@@ -37,6 +38,18 @@ export type BackupTaskFormModalEmit = {
   (e: "saved"): void;
 };
 
+function normalizeIgnorePatterns(patterns?: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of patterns ?? []) {
+    const p = raw.trim();
+    if (!p || seen.has(p)) continue;
+    seen.add(p);
+    out.push(p);
+  }
+  return out;
+}
+
 function isDialogCancelled(err: unknown): boolean {
   const text = formatError(err).toLowerCase();
   return (
@@ -60,6 +73,7 @@ export function useBackupTaskFormModal(
     remote_source: "",
     local_dir: "",
     part_name_prefix: "",
+    ignore_patterns: [],
   });
 
   const remotePickerOpen = ref(false);
@@ -67,11 +81,13 @@ export function useBackupTaskFormModal(
 
   const isEdit = computed(() => !!props.task?.id);
   const isSingle = computed(() => props.kind === "single");
-  const isMulti = computed(() => !isSingle.value);
+  const isFolderZip = computed(() => props.kind === "folder_zip");
+  const isMulti = computed(() => !isSingle.value && !isFolderZip.value);
+  const isDirectBackup = computed(() => isSingle.value || isFolderZip.value);
 
   const eligibleServers = computed(() => {
     const list = props.servers ?? [];
-    return isSingle.value ? list : list.filter((s) => s.support_multi_file);
+    return isDirectBackup.value ? list : list.filter((s) => s.support_multi_file);
   });
 
   const serverOptions = computed(() =>
@@ -93,16 +109,20 @@ export function useBackupTaskFormModal(
     isSingle.value ? "file" : "directory",
   );
 
-  const remoteSourceLabel = computed(() =>
-    isSingle.value ? "远程源文件" : "远程源目录 (--dir)",
-  );
+  const remoteSourceLabel = computed(() => {
+    if (isSingle.value) return "远程源文件";
+    if (isFolderZip.value) return "远程文件夹";
+    return "远程源目录 (--dir)";
+  });
 
-  const remotePickerTitle = computed(() =>
-    isSingle.value ? "选择远程源文件" : "选择远程源目录",
-  );
+  const remotePickerTitle = computed(() => {
+    if (isSingle.value) return "选择远程源文件";
+    if (isFolderZip.value) return "选择远程文件夹";
+    return "选择远程源目录";
+  });
 
   const serverPlaceholder = computed(() =>
-    isSingle.value ? "选择服务器" : "选择支持多文件备份的服务器",
+    isDirectBackup.value ? "选择服务器" : "选择支持多文件备份的服务器",
   );
 
   watch(
@@ -117,6 +137,7 @@ export function useBackupTaskFormModal(
           remote_source: task.remote_source ?? "",
           local_dir: task.local_dir ?? "",
           part_name_prefix: task.part_name_prefix ?? "",
+          ignore_patterns: [...(task.ignore_patterns ?? [])],
         };
       } else {
         form.value = {
@@ -126,6 +147,7 @@ export function useBackupTaskFormModal(
           remote_source: "",
           local_dir: "",
           part_name_prefix: "",
+          ignore_patterns: [],
         };
       }
     },
@@ -138,7 +160,7 @@ export function useBackupTaskFormModal(
       return false;
     }
     if (!selectedServer.value) {
-      if (isSingle.value) {
+      if (isDirectBackup.value) {
         message.warning("所选服务器不可用");
       } else {
         message.warning("所选服务器不可用或不支持多文件备份");
@@ -186,12 +208,23 @@ export function useBackupTaskFormModal(
   async function onSubmit() {
     if (!ensureServerSelected()) return;
     if (!form.value.remote_source?.trim()) {
-      message.warning(isSingle.value ? "请填写远程源文件" : "请填写远程源目录");
+      const hint = isSingle.value ? "远程源文件" : isFolderZip.value ? "远程文件夹" : "远程源目录";
+      message.warning(`请填写${hint}`);
       return;
     }
     if (!form.value.local_dir?.trim()) {
       message.warning("请填写本机保存目录");
       return;
+    }
+    const ignorePatterns = isFolderZip.value
+      ? normalizeIgnorePatterns(form.value.ignore_patterns)
+      : [];
+    if (isFolderZip.value) {
+      const invalid = validateIgnorePatterns(ignorePatterns);
+      if (invalid) {
+        message.warning(invalid);
+        return;
+      }
     }
     saving.value = true;
     try {
@@ -206,6 +239,7 @@ export function useBackupTaskFormModal(
         part_name_prefix: isMulti.value
           ? form.value.part_name_prefix?.trim() || undefined
           : undefined,
+        ignore_patterns: isFolderZip.value && ignorePatterns.length > 0 ? ignorePatterns : undefined,
       };
       let next: BackupTask[];
       if (isEdit.value) {
@@ -217,6 +251,8 @@ export function useBackupTaskFormModal(
       if (!isEdit.value) {
         if (isSingle.value) {
           await BackupService.SetActiveSingleFileTaskID(payload.id);
+        } else if (isFolderZip.value) {
+          await BackupService.SetActiveFolderZipTaskID(payload.id);
         } else {
           await BackupService.SetActiveTaskID(payload.id);
         }
@@ -237,7 +273,14 @@ export function useBackupTaskFormModal(
     saving,
     isEdit,
     isSingle,
+    isFolderZip,
     isMulti,
+    ignorePatterns: computed({
+      get: () => form.value.ignore_patterns ?? [],
+      set: (v: string[]) => {
+        form.value.ignore_patterns = v;
+      },
+    }),
     serverOptions,
     connectionForPicker,
     remotePickerMode,

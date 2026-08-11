@@ -121,7 +121,7 @@ export function useSingleFileBackupPanel(
 
   async function onStart() {
     if (props.disabledByOtherJob) {
-      message.warning("已有多文件备份任务在运行");
+      message.warning("已有其他备份任务在运行");
       return;
     }
     if (!activeTaskId.value?.trim()) {

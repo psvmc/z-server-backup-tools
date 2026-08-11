@@ -8,12 +8,14 @@ import BackupSettingsDialog from "./components/BackupSettingsDialog.vue";
 import BackupTaskFormModal from "./components/BackupTaskFormModal.vue";
 import BackupRunPanel from "./components/BackupRunPanel.vue";
 import SingleFileBackupPanel from "./components/SingleFileBackupPanel.vue";
+import FolderZipBackupPanel from "./components/FolderZipBackupPanel.vue";
 import ServerManageDialog from "./components/ServerManageDialog.vue";
 import { useAppUpdate } from "./composables/useAppUpdate";
 import { useUpdateProgress } from "./composables/useUpdateProgress";
 import { useBackupJob } from "./composables/useBackupJob";
 import { useBackupTiming } from "./composables/useBackupTiming";
 import { useSingleFileBackup } from "./composables/useSingleFileBackup";
+import { useFolderZipBackup } from "./composables/useFolderZipBackup";
 import { useAppMainTabs, useJobExclusion } from "./AppTabs";
 import { downloadPhaseLabel } from "./utils/backupUi";
 import { mergeJobConfig } from "./types/backup";
@@ -56,9 +58,14 @@ const jobConfig = computed(() =>
   mergeJobConfig(config.value, findServer(activeTask.value?.server_id), activeTask.value),
 );
 
-const { mainTab, singlePanelActive } = useAppMainTabs();
+const { mainTab, singlePanelActive, folderZipPanelActive } = useAppMainTabs();
 const single = useSingleFileBackup({ panelActive: singlePanelActive });
-const { multiRunning, singleRunning } = useJobExclusion(status, single.status);
+const folderZip = useFolderZipBackup({ panelActive: folderZipPanelActive });
+const { multiRunning, singleRunning, folderZipRunning, directRunning } = useJobExclusion(
+  status,
+  single.status,
+  folderZip.status,
+);
 
 const { elapsedText, remainingText } = useBackupTiming(status);
 
@@ -133,15 +140,29 @@ function openEditSingleTask(task: BackupTask) {
   taskFormOpen.value = true;
 }
 
+function openAddFolderZipTask() {
+  taskFormKind.value = "folder_zip";
+  editingTask.value = null;
+  taskFormOpen.value = true;
+}
+
+function openEditFolderZipTask(task: BackupTask) {
+  taskFormKind.value = "folder_zip";
+  editingTask.value = task;
+  taskFormOpen.value = true;
+}
+
 async function onTaskSaved() {
   await loadTasks();
   await single.loadTasks();
+  await folderZip.loadTasks();
   await refreshStatus();
 }
 
 function onServersChanged() {
   void loadServers();
   void single.loadTasks();
+  void folderZip.loadTasks();
 }
 </script>
 
@@ -161,7 +182,7 @@ function onServersChanged() {
             </button>
           </a-space>
         </template>
-        <a-tab-pane key="multi" tab="多文件备份" :disabled="singleRunning">
+        <a-tab-pane key="multi" tab="多文件备份" :disabled="directRunning">
           <BackupRunPanel
             :status="status"
             :config="config"
@@ -183,12 +204,20 @@ function onServersChanged() {
             @remove-task="removeTask"
           />
         </a-tab-pane>
-        <a-tab-pane key="single" tab="单文件备份" :disabled="multiRunning">
+        <a-tab-pane key="single" tab="单文件备份" :disabled="multiRunning || folderZipRunning">
           <SingleFileBackupPanel
-            :disabled-by-other-job="multiRunning"
+            :disabled-by-other-job="multiRunning || folderZipRunning"
             :panel-active="singlePanelActive"
             @add-task="openAddSingleTask"
             @edit-task="openEditSingleTask"
+          />
+        </a-tab-pane>
+        <a-tab-pane key="folder_zip" tab="文件夹压缩备份" :disabled="multiRunning || singleRunning">
+          <FolderZipBackupPanel
+            :disabled-by-other-job="multiRunning || singleRunning"
+            :panel-active="folderZipPanelActive"
+            @add-task="openAddFolderZipTask"
+            @edit-task="openEditFolderZipTask"
           />
         </a-tab-pane>
       </a-tabs>
